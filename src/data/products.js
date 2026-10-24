@@ -1,0 +1,66 @@
+export const PRODUCTS = [
+  {
+    id: 'solitaire-pendant',
+    name: 'Solitaire Pendant Necklace',
+    category: 'Necklace',
+    price: 1850,
+    originalPrice: 2200,
+    images: [
+      'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=800&auto=format&fit=crop',
+    ],
+    purity: '৯২৫ স্টার্লিং সিলভার',
+    coating: 'অ্যান্টি-টার্নিশ রোডিয়াম ফিনিশ',
+    inStock: true,
+    shortDescription: 'খাঁটি ৯২৫ স্টার্লিং সিলভারের স্নিগ্ধ আভিজাত্য — যা আপনার প্রতিদিনের সৌন্দর্যকে করে তোলে চিরস্থায়ী।',
+    description: 'প্রতিটি গহনায় রয়েছে আন্তর্জাতিক ৯২৫ সিলভার হলমার্ক নিশ্চয়তা, অ্যান্টি-টার্নিশ ফিনিশিং এবং সংবেদনশীল ত্বকের জন্য শতভাগ অ্যালার্জি-মুক্ত সুরক্ষা। ক্লাসিক ও ক্যাজুয়াল উভয় সাজেই নিখুঁত মানিয়ে যায়।',
+    specs: {
+      material: '925 Sterling Silver',
+      plating: 'Rhodium Plated',
+      stone: 'AAA+ Cubic Zirconia',
+      chainLength: '40cm + 5cm adjustable'
+    }
+  },
+  {
+    id: 'emerald-silver-ring',
+    name: 'Emerald Cut Silver Ring',
+    category: 'Ring',
+    price: 2100,
+    originalPrice: 2500,
+    images: [
+      'https://images.unsplash.com/photo-1605100804763-247f67b3557e?q=80&w=800&auto=format&fit=crop',
+    ],
+    purity: '৯২৫ স্টার্লিং সিলভার',
+    coating: 'অ্যান্টি-টার্নিশ রোডিয়াম ফিনিশ',
+    inStock: true,
+    shortDescription: 'পান্না কাটিং লাক্সারি গ্রিন জির্কন বসানো খাঁটি সিলভার আংটি।',
+    description: 'হাতে পরার সাথে সাথেই দেবে একটি রাজকীয় লুক। প্রিমিয়াম কোটিংয়ের কারণে কালচে হওয়ার কোনো ভয় নেই।',
+    specs: {
+      material: '925 Sterling Silver',
+      plating: 'Platinum Polish',
+      stone: 'Synthetic Emerald & CZ',
+      size: 'Adjustable / Free Size'
+    }
+  },
+  {
+    id: 'minimal-silver-cuff',
+    name: 'Classic Minimal Silver Cuff',
+    category: 'Bracelet',
+    price: 1950,
+    originalPrice: 2300,
+    images: [
+      'https://images.unsplash.com/photo-1611591475155-4286fa7c2e7f?q=80&w=800&auto=format&fit=crop',
+    ],
+    purity: '৯২৫ স্টার্লিং সিলভার',
+    coating: 'অ্যান্টি-টার্নিশ রোডিয়াম ফিনিশ',
+    inStock: true,
+    shortDescription: 'সিম্পল এবং এলিগ্যান্ট ডিজাইনের হ্যান্ডক্রাফটেড ব্রেসলেট।',
+    description: 'দৈনন্দিন অফিস বা ক্যাজুয়াল আউটফিটের সাথে পরার জন্য পারফেক্ট। যেকোনো হাতের সাইজের সাথে অ্যাডজাস্ট করা যায়।',
+    specs: {
+      material: '925 Sterling Silver',
+      plating: 'Rhodium Plated',
+      stone: 'None',
+      diameter: '60mm (Flexible)'
+    }
+  }
+];
