@@ -4,6 +4,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // ডিফল্ট টেক্সট ও কালার
 const DEFAULT_CONFIG = {
+  logoUrl: '/logo.png',
+  logoHeight: 44, // পিক্সেলে লোগোর হাইট
+
   brandName: 'FLAMINGO',
   tagline: 'Elegance That Endures',
   heroHeadline: 'খাঁটি ৯২৫ স্টার্লিং সিলভার জুয়েলারি',
