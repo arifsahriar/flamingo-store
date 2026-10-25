@@ -4,8 +4,10 @@ import React, { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { PRODUCTS } from '@/data/products';
 import { ShieldCheck, Truck, RotateCcw, Sparkles, ShoppingBag } from 'lucide-react';
+import { useCart } from '@/context/CartContext';
 
 export default function ProductDetailPage() {
+  const { addToCart } = useCart();
   const params = useParams();
   const product = PRODUCTS.find((p) => p.id === params.id) || PRODUCTS[0];
   const [selectedImg, setSelectedImg] = useState(product.images[0]);
@@ -78,7 +80,7 @@ export default function ProductDetailPage() {
 
             <div className="mt-8">
               <button
-                onClick={() => alert(`${product.name} ব্যাগে যোগ করার অপশন কার্ট মডিউলে অ্যাড হবে!`)}
+                onClick={() => addToCart(product, 1)}
                 className="w-full py-4 bg-pink-600 hover:bg-pink-700 text-white rounded-2xl font-medium shadow-lg shadow-pink-600/25 flex items-center justify-center gap-2 transition active:scale-[0.99]"
               >
                 <ShoppingBag className="w-5 h-5" /> ব্যাগে যোগ করুন (Add to Cart)

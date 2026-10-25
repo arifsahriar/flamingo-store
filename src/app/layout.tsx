@@ -1,21 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { CartProvider } from "@/context/CartContext";
+import { SiteConfigProvider } from "@/context/SiteConfigContext";
+import CartDrawer from "@/components/CartDrawer";
 
 export const metadata: Metadata = {
-  title: "FLAMINGO | Elegance That Endures — Premium 925 Sterling Silver Jewelry",
-  description:
-    "Discover authentic 925 Sterling Silver jewelry by FLAMINGO. Hallmarked, anti-tarnish, waterproof, and 100% skin safe in Bangladesh.",
+  title: "FLAMINGO | 925 Sterling Silver Jewelry",
+  description: "Elegance That Endures - Premium 925 Sterling Silver Jewelry in Bangladesh",
 };
 
 export default function RootLayout({
@@ -24,12 +15,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="bn"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-[#FFF5F5] text-slate-800 antialiased selection:bg-[#FDA4AF] selection:text-[#881337]">
-        {children}
+    <html lang="bn">
+      <body className="antialiased">
+        <SiteConfigProvider>
+          <CartProvider>
+            {children}
+            <CartDrawer />
+          </CartProvider>
+        </SiteConfigProvider>
       </body>
     </html>
   );
