@@ -1,27 +1,38 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
-import { Sparkles, User, Phone, Mail, Lock, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Sparkles, User, Phone, Mail, Lock, ArrowRight, ShieldCheck, AlertCircle, Gift } from 'lucide-react';
 
-export default function RegisterPage() {
+function RegisterContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { registerCustomer, currentUser, isAuthLoaded } = useAuth();
   const { config } = useSiteConfig();
+
+  const urlRef = searchParams.get('ref') || searchParams.get('referral') || '';
 
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
+    referredByCode: '',
     password: '',
     confirmPassword: '',
   });
 
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // URL রেফারেল কোড থাকলে স্বয়ংক্রিয়ভাবে ফিল করা
+  useEffect(() => {
+    if (urlRef) {
+      setFormData((prev) => ({ ...prev, referredByCode: urlRef.toUpperCase().trim() }));
+    }
+  }, [urlRef]);
 
   // ইতোমধ্যে লগইন থাকলে সরাসরি অ্যাকাউন্টে পাঠানো
   useEffect(() => {
@@ -32,7 +43,10 @@ export default function RegisterPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ 
+      ...prev, 
+      [name]: name === 'referredByCode' ? value.toUpperCase() : value 
+    }));
     setError('');
   };
 
@@ -67,6 +81,7 @@ export default function RegisterPage() {
       name: formData.name,
       phone: formData.phone,
       email: formData.email,
+      referredByCode: formData.referredByCode,
       password: formData.password,
     });
 
@@ -107,7 +122,7 @@ export default function RegisterPage() {
             নতুন মেম্বার রেজিস্ট্রেশন
           </h1>
           <p className="text-xs text-gray-500">
-            আপনার পছন্দের ৯২৫ সিলভার জুয়েলারি অর্ডার ও ওয়ারেন্টি ট্র্যাক করতে অ্যাকাউন্ট খুলুন।
+            আপনার পছন্দের ৯২৫ সিলভার জুয়েলারি অর্ডার ও রিওয়ার্ড ভাউচার পেতে অ্যাকাউন্ট খুলুন।
           </p>
         </div>
 
@@ -167,6 +182,30 @@ export default function RegisterPage() {
             </div>
           </div>
 
+          {/* রেফারেল কোড ইনপুট ফিল্ড */}
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="font-semibold text-gray-700">রেফারেল কোড (যদি থাকে)</label>
+              <span className="text-[10px] text-pink-600 font-semibold bg-pink-50 px-2 py-0.5 rounded-md border border-pink-100">
+                বিশেষ রিওয়ার্ড
+              </span>
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                name="referredByCode"
+                placeholder="যেমন: REF-XXXXX"
+                value={formData.referredByCode}
+                onChange={handleChange}
+                className="w-full pl-9 pr-3.5 py-2.5 border border-pink-200 rounded-xl focus:outline-pink-500 bg-white font-mono uppercase"
+              />
+              <Gift className="w-4 h-4 text-pink-500 absolute left-3 top-3" />
+            </div>
+            <p className="text-[10.5px] text-gray-400 mt-1">
+              বন্ধুর দেওয়া রেফারেল কোড লিখুন। ডেলিভারি সম্পন্ন হলে উভয়েই পাবেন বিশেষ রিওয়ার্ড ভাউচার!
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-gray-700 mb-1.5">পাসওয়ার্ড *</label>
@@ -203,7 +242,7 @@ export default function RegisterPage() {
 
           <div className="p-3 bg-pink-50/60 rounded-xl border border-pink-100 flex items-center gap-2 text-[11px] text-gray-600">
             <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-            <span>আপনার পাসওয়ার্ড ও তথ্যাদি সম্পূর্ণ সুরক্ষিত ও গোপনীয় রাখা হয়।</span>
+            <span>আপনার পাসওয়ার্ড ও তথ্যাদি সম্পূর্ণ সুরক্ষিত ও এনক্রিপ্টেড।</span>
           </div>
 
           <button
@@ -230,5 +269,13 @@ export default function RegisterPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#FFF5F6] flex items-center justify-center text-xs text-gray-500">লোড হচ্ছে...</div>}>
+      <RegisterContent />
+    </Suspense>
   );
 }

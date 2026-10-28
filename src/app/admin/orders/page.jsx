@@ -26,7 +26,9 @@ import {
   LayoutTemplate,
   Sparkles,
   Users,
-  LogOut
+  LogOut,
+  Gift,
+  X
 } from 'lucide-react';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 
@@ -39,12 +41,22 @@ export const STATUS_OPTIONS = [
 ];
 
 export default function AdminOrdersPage() {
-  const { currentAdmin, isAuthLoaded, logoutAdmin } = useAuth();
+  const { currentAdmin, isAuthLoaded, logoutAdmin, issueVoucherToCustomer } = useAuth();
   const router = useRouter();
   const [orders, setOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const { config } = useSiteConfig();
+
+  // রেফারেল রিওয়ার্ড ভাউচার মোডাল স্টেট
+  const [rewardModalData, setRewardModalData] = useState(null);
+  const [rewardForm, setRewardForm] = useState({
+    code: '',
+    type: 'flat',
+    discount: '100',
+    days: '30',
+    note: '',
+  });
 
   // Authentication Guard
   useEffect(() => {
@@ -76,6 +88,65 @@ export default function AdminOrdersPage() {
       localStorage.setItem('flamingo_orders', JSON.stringify(updated));
     } catch (e) {
       console.error('Error saving updated status:', e);
+    }
+  };
+
+  // রেফারেল ভাউচার মোডাল ওপেন
+  const handleOpenRewardModal = (order) => {
+    const allUsers = JSON.parse(localStorage.getItem('flamingo_users') || '[]');
+    const referrer = allUsers.find(
+      (u) => u.referralCode && u.referralCode.toUpperCase() === (order.referredByCode || '').toUpperCase()
+    );
+
+    setRewardModalData({ order, referrer });
+    setRewardForm({
+      code: `REWARD-${Math.floor(1000 + Math.random() * 9000)}`,
+      type: 'flat',
+      discount: '100',
+      days: '30',
+      note: `রেফারেল অর্ডার (${order.orderId || order.id}) সম্পন্ন উপলক্ষে রিওয়ার্ড ভাউচার`,
+    });
+  };
+
+  // রেফারেল ভাউচার কনফার্মেশন ও সেভ
+  const handleConfirmReward = (e) => {
+    e.preventDefault();
+    if (!rewardModalData) return;
+    const { order, referrer } = rewardModalData;
+
+    const res = issueVoucherToCustomer({
+      customerId: referrer?.id || null,
+      customerPhone: referrer?.phone || null,
+      voucher: {
+        code: rewardForm.code.trim().toUpperCase(),
+        discount: Number(rewardForm.discount),
+        type: rewardForm.type,
+        days: Number(rewardForm.days),
+        note: rewardForm.note || 'রেফারেল ডেলিভারি রিওয়ার্ড ভাউচার',
+      },
+    });
+
+    if (res.success) {
+      const targetId = order.orderId || order.id;
+      const updatedOrders = orders.map((o) => {
+        const cId = o.orderId || o.id;
+        if (cId === targetId) {
+          return {
+            ...o,
+            referralRewardIssued: true,
+            referralRewardVoucherCode: rewardForm.code.trim().toUpperCase(),
+            referralRewardDiscount: rewardForm.discount,
+          };
+        }
+        return o;
+      });
+
+      setOrders(updatedOrders);
+      localStorage.setItem('flamingo_orders', JSON.stringify(updatedOrders));
+      setRewardModalData(null);
+      alert(`সফলভাবে ভাউচার "${rewardForm.code}" রেফারার ${referrer?.name || order.referredByCode}-এর অ্যাকাউন্টে ইস্যু করা হয়েছে!`);
+    } else {
+      alert(res.error || 'ভাউচার ইস্যু করা সম্ভব হয়নি।');
     }
   };
 
@@ -507,11 +578,174 @@ export default function AdminOrdersPage() {
                           সর্বমোট: <strong className="text-pink-600 font-mono text-base">৳ {order.grandTotal}</strong>
                         </div>
                       </div>
+
+                      {/* রেফারেল ট্র্যাকিং ও রিওয়ার্ড অ্যাকশন */}
+                      {order.referredByCode && (
+                        <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 bg-pink-50/40 p-2.5 rounded-xl border border-pink-100">
+                          <div className="flex items-center gap-2">
+                            <Gift className="w-4 h-4 text-pink-600 flex-shrink-0" />
+                            <span className="text-gray-700">
+                              রেফারেল কোড: <strong className="font-mono text-pink-700">{order.referredByCode}</strong>
+                            </span>
+                          </div>
+
+                          <div>
+                            {(order.status?.includes('Delivered') || order.status?.includes('সম্পন্ন')) ? (
+                              order.referralRewardIssued ? (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>রিওয়ার্ড ভাউচার ইস্যুকৃত ({order.referralRewardVoucherCode})</span>
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => handleOpenRewardModal(order)}
+                                  className="inline-flex items-center gap-1.5 text-xs font-bold bg-pink-600 hover:bg-pink-700 text-white px-3 py-1.5 rounded-xl shadow-md shadow-pink-600/20 transition active:scale-95 animate-pulse"
+                                >
+                                  <Gift className="w-3.5 h-3.5" />
+                                  <span>🎁 রেফারেল রিওয়ার্ড ভাউচার ইস্যু করুন</span>
+                                </button>
+                              )
+                            ) : (
+                              <span className="text-[11px] text-gray-400 italic">
+                                (ডেলিভারি সম্পন্ন হলে রিওয়ার্ড ভাউচার বাটন সক্রিয় হবে)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                     </div>
                   </div>
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* রেফারেল রিওয়ার্ড ভাউচার মোডাল */}
+        {rewardModalData && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-pink-100 space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between border-b pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center">
+                    <Gift className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-sm">রেফারেল রিওয়ার্ড ভাউচার অনুমোদন</h3>
+                    <p className="text-[10px] text-gray-500">রেফারারের অ্যাকাউন্টে স্বয়ংক্রিয়ভাবে জমা হবে</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setRewardModalData(null)}
+                  className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* রেফারার পরিচিতি */}
+              <div className="p-3 bg-pink-50/50 rounded-2xl border border-pink-100 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">রেফারেল কোড:</span>
+                  <strong className="font-mono text-pink-600">{rewardModalData.order?.referredByCode}</strong>
+                </div>
+                {rewardModalData.referrer ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">রেফারারের নাম:</span>
+                      <strong className="text-gray-900">{rewardModalData.referrer.name}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">মোবাইল:</span>
+                      <strong className="font-mono text-gray-900">{rewardModalData.referrer.phone}</strong>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-amber-700">
+                    * রেফারেল কোডটির বিপরীতে কোনো অ্যাকাউন্ট সরাসরি মেলেনি। ভাউচারটি সংরক্ষিত করা হবে।
+                  </p>
+                )}
+              </div>
+
+              <form onSubmit={handleConfirmReward} className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">ভাউচার কোড *</label>
+                  <input
+                    type="text"
+                    required
+                    value={rewardForm.code}
+                    onChange={(e) => setRewardForm({ ...rewardForm, code: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-2 border rounded-xl font-mono uppercase font-bold focus:outline-pink-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">ডিসকাউন্ট টাইপ</label>
+                    <select
+                      value={rewardForm.type}
+                      onChange={(e) => setRewardForm({ ...rewardForm, type: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl focus:outline-pink-500 bg-white"
+                    >
+                      <option value="flat">ফ্ল্যাট টাকা (৳)</option>
+                      <option value="percentage">শতাংশ (%)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">
+                      {rewardForm.type === 'percentage' ? 'ডিসকাউন্ট (%)' : 'ডিসকাউন্ট (৳)'} *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={rewardForm.discount}
+                      onChange={(e) => setRewardForm({ ...rewardForm, discount: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl font-bold focus:outline-pink-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">মেয়াদ (দিন)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={rewardForm.days}
+                    onChange={(e) => setRewardForm({ ...rewardForm, days: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl focus:outline-pink-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">নোট / কারণ</label>
+                  <input
+                    type="text"
+                    value={rewardForm.note}
+                    onChange={(e) => setRewardForm({ ...rewardForm, note: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl focus:outline-pink-500"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-bold shadow-md transition active:scale-95"
+                  >
+                    ভাউচার ইস্যু ও কনফার্ম করুন
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRewardModalData(null)}
+                    className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-100"
+                  >
+                    বাতিল
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </div>

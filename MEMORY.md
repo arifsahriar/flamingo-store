@@ -17,7 +17,7 @@
 
 | Context | Storage Key | Description & Responsibilities |
 |---|---|---|
-| [`AuthContext`](src/context/AuthContext.jsx) | `flamingo_users`, `flamingo_current_user`, `flamingo_staff_users`, `flamingo_current_admin` | Customer and staff authentication. Customer register/login/logout and persistent session. Default staff roles (`superadmin`, `moderator`). Admin login/logout with role-based permission checks. Cross-tab synced via `storage` event. |
+| [`AuthContext`](src/context/AuthContext.jsx) | `flamingo_users`, `flamingo_current_user`, `flamingo_staff_users`, `flamingo_current_admin`, `flamingo_exclusive_vouchers` | Customer and staff authentication with Unified Smart Login (`unifiedLogin`). Customer registration with auto-generated unique `referralCode` (`REF-XXXXX`) and optional `referredByCode`. Persistent session for customers and role-based staff (`superadmin`, `moderator`). Exclusive voucher issuance and usage tracking (`issueVoucherToCustomer`, `markVoucherUsed`). Cross-tab synced via `storage` event. |
 | [`SiteConfigContext`](src/context/SiteConfigContext.jsx) | `flamingo_site_config` | Dynamic brand name, tagline, logo URL & height, color palette (`primaryColor`, `accentBgColor`), font family, delivery charges (`deliveryChargeInsideDhaka`, `deliveryChargeOutsideDhaka`), and active promo/referral coupons list. |
 | [`ProductsContext`](src/context/ProductsContext.jsx) | `flamingo_products` | Reactive product catalog with fallback to initial `PRODUCTS` ([`src/data/products.js`](src/data/products.js)). Provides `addProduct`, `updateProduct`, `toggleStock`, `deleteProduct`, and `resetToDefault`. Cross-tab synced via `storage` event. |
 | [`CartContext`](src/context/CartContext.jsx) | `flamingo_cart` | Shopping bag drawer state, item quantities, subtotal calculation, and clear cart operations. |
@@ -51,11 +51,14 @@
 - **Deck Reset**: Restarts deck on completion without losing added cart items.
 
 ### `/checkout` — Cash on Delivery (COD) Checkout
+- **Auto-Prepopulate**: Automatically populates customer name and phone number if a customer is logged in.
 - **Dynamic Delivery Charge**: Pulls inside-Dhaka and outside-Dhaka rates from `SiteConfigContext`.
-- **Promo & Referral Coupon Engine**:
-  - Real-time coupon code validation against active coupons in `config.coupons`.
-  - Computes percentage (`%`) or flat (`৳`) discount.
-  - Allows instant coupon removal or reapplication.
+- **Promo & Exclusive Voucher Engine**:
+  - Validates promo codes against global coupons in `config.coupons` AND private exclusive vouchers in `flamingo_exclusive_vouchers`.
+  - **Strict User Binding**: If a voucher is marked `isExclusive: true`, application is strictly allowed ONLY if the current customer or checkout phone matches the voucher recipient; unauthorized attempts are rejected with `"দুঃখিত, এই ভাউচারটি শুধুমাত্র নির্দিষ্ট কাস্টমারের জন্য বরাদ্দ।"`.
+  - Computes percentage (`%`) or flat (`৳`) discount and allows instant removal.
+  - Automatically marks exclusive vouchers as used (`status: 'used'`) via `markVoucherUsed()` upon successful order placement.
+- **Referral Association**: Stores `referredByCode` directly on the order if user registered via a referral link or referral code.
 - **Dynamic Warranty Expiry Calculation on Order Submission**:
   ```javascript
   orderTimestamp = Date.now();
@@ -80,17 +83,30 @@
   - Courier packaging checklist and official signature lines for customer & authorized officer.
   - Dedicated `@media print` CSS: Hides storefront elements, headers, footers, action buttons (`.no-print`), resets backdrop overlays, and forces 100% pure white background with high-contrast `#000` dark typography for crisp printing and PDF exports.
 
-### `/register` — Customer Registration
-- **Input Fields**: Full Name, Phone (11 digits), Email, Password (min 6 characters).
+### `/register` — Customer Registration & Referral Code Generation
+- **Input Fields**: Full Name, Phone (11 digits), Email, Password (min 6 characters), and optional "রেফারেল কোড (যদি থাকে)" (`referredByCode`).
+- **Deep-Link Referral Support**: URL query param `?ref=REF-XXXXX` automatically pre-fills the referral code field.
+- **Unique Referral Code Generation**: Automatically generates a unique 8-character referral code (`REF-` + 5 uppercase alphanumeric chars) stored in the customer's account profile.
 - **Auto Login**: On successful registration, account is saved in `flamingo_users`, active customer session is created in `flamingo_current_user`, and user is redirected to `/account`.
 
-### `/login` — Customer Sign-In
-- **Dual Credentials**: Sign in using Phone number or Email address and Password.
-- **Redirect Support**: Honors `?redirect=/checkout` query param so shoppers are returned directly to checkout after signing in.
+### `/login` — Unified Smart Login Gateway
+- **Single Universal Gateway**: Authenticates both administrative staff (`admin` / `password123`, `moderator` / `mod123`) AND registered customers (`flamingo_users` via phone or email + password).
+- **Role-Based Instant Redirection**:
+  - `superadmin` / `moderator` → Redirected directly to Admin Dashboard (`/admin/orders`).
+  - `customer` → Redirected to `/account` (or `?redirect=` target such as `/checkout`).
+- **1-Click Demo Logins**: Quick testing pills for "সুপার অ্যাডমিন", "অর্ডার মডারেটর", and "টেস্ট কাস্টমার" with auto-fill credentials.
 - **Prerender Safe**: Wrapped in `<Suspense>` for Next.js App Router query parameter hydration.
 
-### `/account` — Customer Dashboard
+### `/account` — Customer Dashboard & Referral Hub
 - **Customer Profile**: Displays registered name, phone, email, join date, total orders placed, and lifetime spend.
+- **Customer Referral Hub ("আমার রেফারেল কোড ও লিংক")**:
+  - Displays user's unique referral code (`REF-XXXXX`) with 1-click clipboard copy.
+  - Generates shareable registration link (`/register?ref=REF-XXXXX`) with 1-click clipboard copy.
+  - Stat counters: "সফল রেফারেল সংখ্যা" (matched against registered users and completed orders) and "অর্জিত রিওয়ার্ড ভাউচার".
+- **Exclusive Vouchers Section ("আমার এক্সক্লুসিভ ভাউচারসমূহ")**:
+  - Lists private personalized vouchers granted by admins or earned from successful referrals.
+  - Displays voucher code, discount pill (e.g. `১৫% ছাড়` or `৳১০০ ছাড়`), minimum order requirement, expiration date countdown, and status badge (`সক্রিয়`, `ব্যবহৃত`, `মেয়াদোত্তীর্ণ`).
+  - 1-click code copy button to apply directly at checkout.
 - **Matched Order History**: Automatically queries `flamingo_orders` matching user's phone or email address.
 - **Actions**: Direct links to live order tracking (`/track-order?orderId=...`), item-level warranty claims, and one-click logout.
 
@@ -123,7 +139,7 @@ All admin portals share a synchronized top-level navigation bar with role detect
 - **Delivery Configuration**: Inside Dhaka & Outside Dhaka delivery fees (৳).
 - **Dynamic Coupon & Referral Creator**: Form to create custom promo codes (Code, percentage or flat discount, and descriptive notes) with quick deletion.
 
-### `/admin/orders` — Order Lifecycle Management
+### `/admin/orders` — Order Lifecycle & Referral Reward Management
 - **Dashboard Metrics**: Total orders, Pending, Delivered, and Total Revenue calculations.
 - **Search & Filters**: Search by ID/Customer/Phone, plus status filter tabs.
 - **Status Transitions**: Interactive dropdown supporting 5 statuses:
@@ -132,12 +148,17 @@ All admin portals share a synchronized top-level navigation bar with role detect
   - `ডেলিভারিতে পাঠানো হয়েছে (Shipped)`
   - `ডেলিভারি সম্পন্ন (Delivered)`
   - `বাতিল করা হয়েছে (Cancelled)`
-- **Order Cards**:
+- **Order Cards & Details**:
   - Clickable `<a href="tel:...">` phone call link.
   - Complete delivery address with selected area.
   - Item listing with readable warranty expiration badges.
   - Financial breakdown with applied coupon badges and deducted discount amounts.
+  - Referral badge (`রেফারেল কোড: REF-XXXXX`) indicating orders placed through a referrer.
   - Delete order with confirmation.
+- **Admin Referral Voucher Approval Workflow**:
+  - When an order with a referral code reaches `ডেলিভারি সম্পন্ন (Delivered)` status, an interactive **"🎁 রেফারেল রিওয়ার্ড ভাউচার ইস্যু করুন"** action button appears.
+  - Clicking opens an approval modal pre-populated with the referrer's information and custom voucher settings (voucher code, discount type/amount, validity duration, minimum spend, note).
+  - Upon submission, the voucher is saved as an exclusive voucher bound to the referrer, visible immediately in their `/account` dashboard, and the order is marked `referralRewardIssued: true`.
 
 ### `/admin/products` — Product Catalog Manager
 - **Product Registry**: Add new silver jewelry items or edit existing items.
@@ -146,10 +167,14 @@ All admin portals share a synchronized top-level navigation bar with role detect
 - **Table Controls**: Instant stock toggle button (`In Stock` ↔ `Out of Stock`), edit modal opener, and delete with confirmation.
 - **Catalog Reset**: Restore default catalog from `src/data/products.js` anytime.
 
-### `/admin/customers` — Customer CRM & Marketing Export
+### `/admin/customers` — Customer CRM, Marketing Export & Direct Voucher Granting
 - **Consolidated Customer Registry**: Merges registered members (`flamingo_users`) with guest checkout buyers (`flamingo_orders`), deduplicating by phone and email.
 - **CRM Metrics**: Total customer count, registered member count, repeat customer count, and total customer spend.
 - **Filters & Search**: Instant filter by "All Customers", "Registered Members", or "Guest Buyers", plus search by name, phone, or email.
+- **Direct Exclusive Voucher Granting**:
+  - Admin can issue personalized exclusive vouchers to any customer directly from the table using the **"🎁 ভাউচার দিন"** button.
+  - Custom modal allows setting code, discount type (`percentage` or `flat`), discount value, minimum order requirement, validity in days, and custom note.
+  - Vouchers are saved to the target customer's profile and tracked in `flamingo_exclusive_vouchers`.
 - **UTF-8 BOM CSV Export**: One-click download of `flamingo_customers_export_[timestamp].csv` with `\uFEFF` encoding ensuring flawless rendering of Bengali fonts in Microsoft Excel on Windows.
 
 ---

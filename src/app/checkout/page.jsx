@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { useAuth } from '@/context/AuthContext';
 import { 
   ShieldCheck, 
   Truck, 
@@ -13,29 +14,42 @@ import {
   Phone, 
   MapPin, 
   FileText, 
-  Sparkles,
-  ShoppingBag,
-  BadgeAlert,
-  Tag,
-  X,
-  Check
+  Sparkles, 
+  ShoppingBag, 
+  BadgeAlert, 
+  Tag, 
+  X, 
+  Check,
+  Gift
 } from 'lucide-react';
 
 export default function CheckoutPage() {
   const { cart, subtotal, clearCart } = useCart();
   const { config } = useSiteConfig();
+  const { currentUser, markVoucherUsed } = useAuth();
 
   // ডায়নামিক ডেলিভারি চার্জ (SiteConfig থেকে নেওয়া)
   const deliveryChargeInside = config.deliveryChargeInsideDhaka ?? 80;
   const deliveryChargeOutside = config.deliveryChargeOutsideDhaka ?? 130;
 
   const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
+    name: currentUser?.name || '',
+    phone: currentUser?.phone || '',
     area: 'inside', // 'inside' অথবা 'outside'
     address: '',
     note: '',
   });
+
+  // লগইন ইউজারের ক্ষেত্রে তথ্য স্বয়ংক্রিয় প্রিপপুলেট
+  useEffect(() => {
+    if (currentUser) {
+      setFormData((prev) => ({
+        ...prev,
+        name: prev.name || currentUser.name || '',
+        phone: prev.phone || currentUser.phone || '',
+      }));
+    }
+  }, [currentUser]);
 
   // কুপন স্টেট
   const [couponInput, setCouponInput] = useState('');
@@ -74,7 +88,7 @@ export default function CheckoutPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // কুপন প্রয়োগ হ্যান্ডলার
+  // কুপন প্রয়োগ হ্যান্ডলার (গ্লোবাল ও এক্সক্লুসিভ ভাউচার ভ্যালিডেশন লজিক)
   const handleApplyCoupon = (e) => {
     e.preventDefault();
     setCouponError('');
@@ -88,27 +102,96 @@ export default function CheckoutPage() {
       return;
     }
 
+    // ১. গ্লোবাল কুপন খোঁজা (SiteConfigContext)
     const availableCoupons = config.coupons || [];
-    const matchedCoupon = availableCoupons.find((c) => c.code.toUpperCase() === trimmedCode);
+    const matchedGlobalCoupon = availableCoupons.find((c) => c.code.toUpperCase() === trimmedCode);
 
-    if (!matchedCoupon) {
+    // ২. এক্সক্লুসিভ ভাউচার খোঁজা (localStorage: flamingo_exclusive_vouchers এবং flamingo_users)
+    let matchedExclusiveVoucher = null;
+    try {
+      const globalExclusive = JSON.parse(localStorage.getItem('flamingo_exclusive_vouchers') || '[]');
+      matchedExclusiveVoucher = globalExclusive.find((v) => v.code.toUpperCase() === trimmedCode);
+      
+      if (!matchedExclusiveVoucher) {
+        const allUsers = JSON.parse(localStorage.getItem('flamingo_users') || '[]');
+        for (const u of allUsers) {
+          if (Array.isArray(u.vouchers)) {
+            const found = u.vouchers.find((v) => v.code.toUpperCase() === trimmedCode);
+            if (found) {
+              matchedExclusiveVoucher = found;
+              break;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error finding exclusive voucher:', err);
+    }
+
+    if (!matchedGlobalCoupon && !matchedExclusiveVoucher) {
       setCouponError('কুপন কোডটি সঠিক নয় অথবা মেয়াদোত্তীর্ণ!');
       return;
     }
 
-    let calculatedDiscount = 0;
-    if (matchedCoupon.type === 'percentage') {
-      calculatedDiscount = Math.round((subtotal * matchedCoupon.discount) / 100);
-    } else {
-      calculatedDiscount = Math.min(matchedCoupon.discount, subtotal);
+    // এক্সক্লুসিভ ভাউচার হলে বিশেষ নিরাপত্তা ও কাস্টমার বাউন্ডিং চেক
+    if (matchedExclusiveVoucher) {
+      if (matchedExclusiveVoucher.isUsed) {
+        setCouponError('দুঃখিত, এই ভাউচারটি ইতোমধ্যে ব্যবহার করা হয়েছে!');
+        return;
+      }
+
+      if (matchedExclusiveVoucher.expiryTimestamp && Date.now() > matchedExclusiveVoucher.expiryTimestamp) {
+        setCouponError('দুঃখিত, এই ভাউচারটির ব্যবহারের মেয়াদ শেষ হয়ে গেছে!');
+        return;
+      }
+
+      // কাস্টমার ম্যাচিং যাচাই
+      const userPhone = currentUser ? (currentUser.phone || '').trim() : formData.phone.trim();
+      const userId = currentUser ? currentUser.id : null;
+
+      const matchesUser = 
+        (matchedExclusiveVoucher.customerId && matchedExclusiveVoucher.customerId === userId) ||
+        (matchedExclusiveVoucher.customerPhone && matchedExclusiveVoucher.customerPhone === userPhone);
+
+      if (!matchesUser) {
+        setCouponError('দুঃখিত, এই ভাউচারটি শুধুমাত্র নির্দিষ্ট কাস্টমারের জন্য বরাদ্দ।');
+        return;
+      }
+
+      let calculatedDiscount = 0;
+      if (matchedExclusiveVoucher.type === 'percentage') {
+        calculatedDiscount = Math.round((subtotal * matchedExclusiveVoucher.discount) / 100);
+      } else {
+        calculatedDiscount = Math.min(matchedExclusiveVoucher.discount, subtotal);
+      }
+
+      setAppliedCoupon({
+        ...matchedExclusiveVoucher,
+        isExclusive: true,
+        discountAmount: calculatedDiscount,
+      });
+      setCouponSuccess(`এক্সক্লুসিভ ভাউচার "${matchedExclusiveVoucher.code}" সফলভাবে প্রয়োগ করা হয়েছে! ৳ ${calculatedDiscount} ছাড় পাওয়া গেছে।`);
+      setCouponInput('');
+      return;
     }
 
-    setAppliedCoupon({
-      ...matchedCoupon,
-      discountAmount: calculatedDiscount,
-    });
-    setCouponSuccess(`কুপন "${matchedCoupon.code}" সফলভাবে প্রয়োগ করা হয়েছে! ৳ ${calculatedDiscount} ছাড় পাওয়া গেছে।`);
-    setCouponInput('');
+    // গ্লোবাল কুপন প্রয়োগ
+    if (matchedGlobalCoupon) {
+      let calculatedDiscount = 0;
+      if (matchedGlobalCoupon.type === 'percentage') {
+        calculatedDiscount = Math.round((subtotal * matchedGlobalCoupon.discount) / 100);
+      } else {
+        calculatedDiscount = Math.min(matchedGlobalCoupon.discount, subtotal);
+      }
+
+      setAppliedCoupon({
+        ...matchedGlobalCoupon,
+        isExclusive: false,
+        discountAmount: calculatedDiscount,
+      });
+      setCouponSuccess(`কুপন "${matchedGlobalCoupon.code}" সফলভাবে প্রয়োগ করা হয়েছে! ৳ ${calculatedDiscount} ছাড় পাওয়া গেছে।`);
+      setCouponInput('');
+    }
   };
 
   // কুপন রিমুভ হ্যান্ডলার
@@ -163,6 +246,9 @@ export default function CheckoutPage() {
       ? `ঢাকা সিটির বাইরে / সমগ্র বাংলাদেশ (৳${deliveryChargeOutside})` 
       : `ঢাকা সিটির ভেতরে (৳${deliveryChargeInside})`;
 
+    // রেফারেল ট্র্যাকিং কোড
+    const referredByCode = currentUser?.referredByCode || null;
+
     const newOrder = {
       id: orderId,
       orderId,
@@ -188,12 +274,23 @@ export default function CheckoutPage() {
         discount: appliedCoupon.discount,
         discountAmount: appliedCoupon.discountAmount,
         note: appliedCoupon.note || '',
+        isExclusive: Boolean(appliedCoupon.isExclusive),
       } : null,
+      referredByCode: referredByCode,
+      referralRewardIssued: false,
       deliveryCharge,
       shippingCost: deliveryCharge,
       grandTotal,
       status: 'নতুন অর্ডার (Pending)',
     };
+
+    // যদি এক্সক্লুসিভ ভাউচার ব্যবহার করা হয়ে থাকে, তা ব্যবহৃত মার্ক করা
+    if (appliedCoupon && appliedCoupon.isExclusive) {
+      markVoucherUsed({
+        voucherCode: appliedCoupon.code,
+        customerPhone: formData.phone,
+      });
+    }
 
     // লোকাল স্টোরেজে অর্ডার জমা রাখা
     try {

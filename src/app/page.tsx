@@ -13,14 +13,15 @@ import {
   Truck, 
   ArrowRight, 
   Flame,
-  User
+  User,
+  Shield
 } from 'lucide-react';
 
 export default function HomePage() {
   const { config } = useSiteConfig();
   const { addToCart, totalItems, setIsCartOpen } = useCart();
   const { products } = useProducts();
-  const { currentUser } = useAuth();
+  const { currentUser, currentAdmin } = useAuth();
 
   const featuredProducts = products.slice(0, 4);
 
@@ -86,22 +87,32 @@ export default function HomePage() {
               <Sparkles className="w-3.5 h-3.5" /> সোয়াইপ মোড
             </Link>
 
-            {currentUser ? (
+            {currentAdmin ? (
+              <Link
+                href="/admin/orders"
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl text-pink-700 bg-pink-50 border border-pink-200 hover:bg-pink-100 transition shadow-xs"
+                title="অ্যাডমিন প্যানেল"
+              >
+                <Shield className="w-3.5 h-3.5 text-pink-600" />
+                <span>অ্যাডমিন ({currentAdmin.role === 'superadmin' ? 'Super' : 'Mod'})</span>
+              </Link>
+            ) : currentUser ? (
               <Link
                 href="/account"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 sm:px-3 py-2 rounded-xl text-pink-700 bg-pink-50 border border-pink-100 hover:bg-pink-100/70 transition"
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl text-pink-700 bg-pink-50 border border-pink-200 hover:bg-pink-100 transition shadow-xs"
                 title="আমার অ্যাকাউন্ট"
               >
                 <User className="w-3.5 h-3.5 text-pink-600" />
-                <span className="hidden sm:inline">{currentUser.name.split(' ')[0]}</span>
+                <span>{currentUser.name.split(' ')[0]}</span>
               </Link>
             ) : (
               <Link
                 href="/login"
-                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 sm:px-3 py-2 rounded-xl text-gray-700 hover:text-pink-600 hover:bg-pink-50/70 transition"
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl text-pink-700 bg-pink-50 border border-pink-200 hover:bg-pink-100 shadow-xs transition active:scale-95"
+                title="কাস্টমার ও স্টাফ লগইন"
               >
-                <User className="w-3.5 h-3.5 text-gray-500" />
-                <span>লগইন</span>
+                <User className="w-4 h-4 text-pink-600" />
+                <span>লগইন / একাউন্ট</span>
               </Link>
             )}
 

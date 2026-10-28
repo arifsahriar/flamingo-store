@@ -20,16 +20,28 @@ import {
   LogOut,
   UserCheck,
   UserPlus,
-  DollarSign
+  DollarSign,
+  Gift,
+  X
 } from 'lucide-react';
 
 export default function AdminCustomersPage() {
   const router = useRouter();
-  const { currentAdmin, isAuthLoaded, logoutAdmin } = useAuth();
+  const { currentAdmin, isAuthLoaded, logoutAdmin, issueVoucherToCustomer } = useAuth();
 
   const [customers, setCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL'); // 'ALL' | 'REGISTERED' | 'GUEST'
+
+  // কাস্টম ভাউচার মোডাল স্টেট
+  const [targetCustomer, setTargetCustomer] = useState(null);
+  const [crmVoucherForm, setCrmVoucherForm] = useState({
+    code: '',
+    type: 'flat',
+    discount: '150',
+    days: '30',
+    note: '',
+  });
 
   // রুট গার্ড: অ্যাডমিন লগইন না থাকলে /admin/login এ রিডাইরেক্ট
   useEffect(() => {
@@ -146,6 +158,43 @@ export default function AdminCustomersPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // কাস্টমার ভাউচার মোডাল ওপেন
+  const handleOpenVoucherModal = (cust) => {
+    setTargetCustomer(cust);
+    setCrmVoucherForm({
+      code: `VIP-${Math.floor(1000 + Math.random() * 9000)}`,
+      type: 'flat',
+      discount: '150',
+      days: '30',
+      note: `সম্মানিত গ্রাহক ${cust.name}-এর জন্য বিশেষ এক্সক্লুসিভ ভাউচার`,
+    });
+  };
+
+  // কাস্টমার ভাউচার ইস্যু কনফার্মেশন
+  const handleConfirmIssueVoucher = (e) => {
+    e.preventDefault();
+    if (!targetCustomer) return;
+
+    const res = issueVoucherToCustomer({
+      customerId: targetCustomer.id?.startsWith('usr_') ? targetCustomer.id : null,
+      customerPhone: targetCustomer.phone,
+      voucher: {
+        code: crmVoucherForm.code.trim().toUpperCase(),
+        discount: Number(crmVoucherForm.discount),
+        type: crmVoucherForm.type,
+        days: Number(crmVoucherForm.days),
+        note: crmVoucherForm.note || 'CRM এক্সক্লুসিভ কাস্টমার ভাউচার',
+      },
+    });
+
+    if (res.success) {
+      alert(`সফলভাবে গ্রাহক "${targetCustomer.name}"-এর জন্য ভাউচার "${crmVoucherForm.code}" ইস্যু করা হয়েছে!`);
+      setTargetCustomer(null);
+    } else {
+      alert(res.error || 'ভাউচার ইস্যু করা সম্ভব হয়নি।');
+    }
   };
 
   const totalRevenue = customers.reduce((sum, c) => sum + c.totalSpent, 0);
@@ -344,6 +393,7 @@ export default function AdminCustomersPage() {
                     <th className="py-3.5 px-4 text-center">মোট অর্ডার</th>
                     <th className="py-3.5 px-4">মোট কেনাকাটা</th>
                     <th className="py-3.5 px-4">সর্বশেষ অর্ডার</th>
+                    <th className="py-3.5 px-4 text-center">অ্যাকশন</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -401,10 +451,141 @@ export default function AdminCustomersPage() {
                         {cust.lastOrderDate}
                       </td>
 
+                      {/* অ্যাকশন বাটন */}
+                      <td className="py-3.5 px-4 text-center">
+                        <button
+                          onClick={() => handleOpenVoucherModal(cust)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-700 rounded-xl text-[11px] font-bold border border-pink-200 transition active:scale-95 shadow-xs"
+                          title="এই গ্রাহকের জন্য এক্সক্লুসিভ ভাউচার বরাদ্দ করুন"
+                        >
+                          <Gift className="w-3.5 h-3.5 text-pink-600" />
+                          <span>ভাউচার দিন</span>
+                        </button>
+                      </td>
+
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* কাস্টমার এক্সক্লুসিভ ভাউচার ইস্যু মোডাল */}
+        {targetCustomer && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-pink-100 space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between border-b pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center">
+                    <Gift className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-sm">গ্রাহককে এক্সক্লুসিভ ভাউচার বরাদ্দ</h3>
+                    <p className="text-[10px] text-gray-500">শুধুমাত্র এই নির্দিষ্ট গ্রাহক চেকআউটে ব্যবহার করতে পারবেন</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setTargetCustomer(null)}
+                  className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* টার্গেট গ্রাহক পরিচিতি */}
+              <div className="p-3 bg-pink-50/50 rounded-2xl border border-pink-100 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">গ্রাহকের নাম:</span>
+                  <strong className="text-gray-900">{targetCustomer.name}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">মোবাইল নম্বর:</span>
+                  <strong className="font-mono text-gray-900">{targetCustomer.phone}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">গ্রাহকের স্ট্যাটাস:</span>
+                  <span className="text-emerald-700 font-semibold">{targetCustomer.isRegistered ? 'রেজিস্টার্ড মেম্বার' : 'গেস্ট ক্রেতা'}</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleConfirmIssueVoucher} className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">ভাউচার কোড *</label>
+                  <input
+                    type="text"
+                    required
+                    value={crmVoucherForm.code}
+                    onChange={(e) => setCrmVoucherForm({ ...crmVoucherForm, code: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-2 border rounded-xl font-mono uppercase font-bold focus:outline-pink-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">ডিসকাউন্ট টাইপ</label>
+                    <select
+                      value={crmVoucherForm.type}
+                      onChange={(e) => setCrmVoucherForm({ ...crmVoucherForm, type: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl focus:outline-pink-500 bg-white"
+                    >
+                      <option value="flat">ফ্ল্যাট টাকা (৳)</option>
+                      <option value="percentage">শতাংশ (%)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">
+                      {crmVoucherForm.type === 'percentage' ? 'ডিসকাউন্ট (%)' : 'ডিসকাউন্ট (৳)'} *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={crmVoucherForm.discount}
+                      onChange={(e) => setCrmVoucherForm({ ...crmVoucherForm, discount: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl font-bold focus:outline-pink-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">মেয়াদ (দিন)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={crmVoucherForm.days}
+                    onChange={(e) => setCrmVoucherForm({ ...crmVoucherForm, days: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl focus:outline-pink-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">ভাউচার নোট / শিরোনাম</label>
+                  <input
+                    type="text"
+                    value={crmVoucherForm.note}
+                    onChange={(e) => setCrmVoucherForm({ ...crmVoucherForm, note: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-xl focus:outline-pink-500"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-bold shadow-md transition active:scale-95"
+                  >
+                    ভাউচার বরাদ্দ করুন
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTargetCustomer(null)}
+                    className="px-4 py-2.5 border rounded-xl text-gray-600 hover:bg-gray-100"
+                  >
+                    বাতিল
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
