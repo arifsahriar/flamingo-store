@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { 
   Palette, 
@@ -17,13 +19,25 @@ import {
   Trash2,
   Plus,
   Percent,
-  Sparkles
+  Sparkles,
+  Users,
+  LogOut,
+  Lock
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
+  const { currentAdmin, isAuthLoaded, logoutAdmin } = useAuth();
+  const router = useRouter();
   const { config, updateConfig, resetToDefault } = useSiteConfig();
   const [form, setForm] = useState(config);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Authentication Guard
+  useEffect(() => {
+    if (isAuthLoaded && !currentAdmin) {
+      router.push('/admin/login');
+    }
+  }, [isAuthLoaded, currentAdmin, router]);
 
   // নতুন কুপন স্টেট
   const [newCoupon, setNewCoupon] = useState({
@@ -99,6 +113,39 @@ export default function AdminSettingsPage() {
     }));
   };
 
+  if (!isAuthLoaded || !currentAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-xs text-gray-400">
+        অ্যাডমিন প্রমাণীকরণ যাচাই হচ্ছে...
+      </div>
+    );
+  }
+
+  // Moderator Access Restriction (Serial 13 requirement)
+  if (currentAdmin.role !== 'superadmin') {
+    return (
+      <div className="min-h-screen bg-[#FDF9FA] flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-rose-100 shadow-xl text-center space-y-4">
+          <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900">অ্যাক্সেস সংরক্ষিত</h2>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            আপনার এই সেটিংসে প্রবেশাধিকার নেই। শুধুমাত্র সুপার অ্যাডমিন (Super Admin) অ্যাক্সেস করতে পারেন।
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/admin/orders"
+              className="inline-flex items-center justify-center w-full py-3 px-4 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold shadow-md transition"
+            >
+              অর্ডার ম্যানেজমেন্টে ফিরে যান
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-8">
       <div className="max-w-4xl mx-auto">
@@ -126,6 +173,13 @@ export default function AdminSettingsPage() {
               </Link>
               <span className="text-gray-300">|</span>
               <Link 
+                href="/admin/customers" 
+                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+              >
+                <Users className="w-3.5 h-3.5" /> কাস্টমার CRM
+              </Link>
+              <span className="text-gray-300">|</span>
+              <Link 
                 href="/collections" 
                 target="_blank"
                 className="text-gray-400 hover:text-gray-700 flex items-center gap-1"
@@ -142,7 +196,28 @@ export default function AdminSettingsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* অ্যাডমিন প্রোফাইল ব্যাজ */}
+            <div className="flex items-center gap-2.5 bg-white p-2 sm:px-3 rounded-2xl border border-gray-200 shadow-xs text-xs">
+              <div className="text-right">
+                <div className="font-bold text-gray-900 leading-tight">{currentAdmin.name}</div>
+                <span className="text-[10px] font-semibold px-2 py-0.2 rounded-md bg-pink-50 text-pink-700">
+                  Super Admin
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  logoutAdmin();
+                  router.push('/admin/login');
+                }}
+                className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                title="লগআউট"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={handleReset}

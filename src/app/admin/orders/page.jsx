@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { 
   Package, 
   Phone, 
@@ -22,7 +24,9 @@ import {
   ExternalLink,
   Tag,
   LayoutTemplate,
-  Sparkles
+  Sparkles,
+  Users,
+  LogOut
 } from 'lucide-react';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 
@@ -35,10 +39,19 @@ export const STATUS_OPTIONS = [
 ];
 
 export default function AdminOrdersPage() {
+  const { currentAdmin, isAuthLoaded, logoutAdmin } = useAuth();
+  const router = useRouter();
   const [orders, setOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const { config } = useSiteConfig();
+
+  // Authentication Guard
+  useEffect(() => {
+    if (isAuthLoaded && !currentAdmin) {
+      router.push('/admin/login');
+    }
+  }, [isAuthLoaded, currentAdmin, router]);
 
   // লোকাল স্টোরেজ থেকে অর্ডার লোড করা
   useEffect(() => {
@@ -131,6 +144,14 @@ export default function AdminOrdersPage() {
   const pendingCount = orders.filter((o) => o.status.includes('Pending')).length;
   const deliveredCount = orders.filter((o) => o.status.includes('Delivered')).length;
 
+  if (!isAuthLoaded || !currentAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-xs text-gray-400">
+        অ্যাডমিন প্রমাণীকরণ যাচাই হচ্ছে...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#FDF9FA] py-8 sm:py-10 px-4 sm:px-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -139,12 +160,18 @@ export default function AdminOrdersPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-pink-100 gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2 text-xs font-semibold">
-              <Link 
-                href="/admin/settings" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
-              </Link>
+              {currentAdmin.role === 'superadmin' ? (
+                <Link 
+                  href="/admin/settings" 
+                  className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+                >
+                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
+                </Link>
+              ) : (
+                <span className="text-gray-400 cursor-not-allowed flex items-center gap-1" title="শুধুমাত্র সুপারঅ্যাডমিন অ্যাক্সেস">
+                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস (লক)
+                </span>
+              )}
               <span className="text-gray-300">|</span>
               <span className="text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md flex items-center gap-1">
                 <Package className="w-3.5 h-3.5" /> অর্ডার ম্যানেজমেন্ট
@@ -155,6 +182,13 @@ export default function AdminOrdersPage() {
                 className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
               >
                 <Sparkles className="w-3.5 h-3.5" /> প্রোডাক্ট ক্যাটালগ
+              </Link>
+              <span className="text-gray-300">|</span>
+              <Link 
+                href="/admin/customers" 
+                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+              >
+                <Users className="w-3.5 h-3.5" /> কাস্টমার CRM
               </Link>
               <span className="text-gray-300">|</span>
               <Link 
@@ -174,9 +208,33 @@ export default function AdminOrdersPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold bg-pink-50 text-pink-700 px-3 py-1.5 rounded-xl border border-pink-100">
-              মোট অর্ডার: {orders.length} টি
+          <div className="flex items-center gap-3">
+            {/* অ্যাডমিন প্রোফাইল ব্যাজ ও লগআউট */}
+            <div className="flex items-center gap-2.5 bg-white p-2 sm:px-3 rounded-2xl border border-gray-200 shadow-xs text-xs">
+              <div className="text-right">
+                <div className="font-bold text-gray-900 leading-tight">{currentAdmin.name}</div>
+                <span className={`text-[10px] font-semibold px-2 py-0.2 rounded-md ${
+                  currentAdmin.role === 'superadmin' 
+                    ? 'bg-pink-50 text-pink-700' 
+                    : 'bg-blue-50 text-blue-700'
+                }`}>
+                  {currentAdmin.role === 'superadmin' ? 'Super Admin' : 'Order Moderator'}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  logoutAdmin();
+                  router.push('/admin/login');
+                }}
+                className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                title="লগআউট"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+
+            <span className="text-xs font-mono font-bold bg-pink-50 text-pink-700 px-3 py-2 rounded-xl border border-pink-100">
+              মোট: {orders.length} টি
             </span>
           </div>
         </div>

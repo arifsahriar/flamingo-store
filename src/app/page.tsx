@@ -5,19 +5,22 @@ import Link from 'next/link';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { useCart } from '@/context/CartContext';
 import { useProducts } from '@/context/ProductsContext';
+import { useAuth } from '@/context/AuthContext';
 import { 
   Sparkles, 
   ShoppingBag, 
   ShieldCheck, 
   Truck, 
   ArrowRight, 
-  Flame 
+  Flame,
+  User
 } from 'lucide-react';
 
 export default function HomePage() {
   const { config } = useSiteConfig();
   const { addToCart, totalItems, setIsCartOpen } = useCart();
   const { products } = useProducts();
+  const { currentUser } = useAuth();
 
   const featuredProducts = products.slice(0, 4);
 
@@ -82,6 +85,25 @@ export default function HomePage() {
             >
               <Sparkles className="w-3.5 h-3.5" /> সোয়াইপ মোড
             </Link>
+
+            {currentUser ? (
+              <Link
+                href="/account"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 sm:px-3 py-2 rounded-xl text-pink-700 bg-pink-50 border border-pink-100 hover:bg-pink-100/70 transition"
+                title="আমার অ্যাকাউন্ট"
+              >
+                <User className="w-3.5 h-3.5 text-pink-600" />
+                <span className="hidden sm:inline">{currentUser.name.split(' ')[0]}</span>
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 sm:px-3 py-2 rounded-xl text-gray-700 hover:text-pink-600 hover:bg-pink-50/70 transition"
+              >
+                <User className="w-3.5 h-3.5 text-gray-500" />
+                <span>লগইন</span>
+              </Link>
+            )}
 
             <button
               onClick={() => setIsCartOpen(true)}

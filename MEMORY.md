@@ -17,6 +17,7 @@
 
 | Context | Storage Key | Description & Responsibilities |
 |---|---|---|
+| [`AuthContext`](src/context/AuthContext.jsx) | `flamingo_users`, `flamingo_current_user`, `flamingo_staff_users`, `flamingo_current_admin` | Customer and staff authentication. Customer register/login/logout and persistent session. Default staff roles (`superadmin`, `moderator`). Admin login/logout with role-based permission checks. Cross-tab synced via `storage` event. |
 | [`SiteConfigContext`](src/context/SiteConfigContext.jsx) | `flamingo_site_config` | Dynamic brand name, tagline, logo URL & height, color palette (`primaryColor`, `accentBgColor`), font family, delivery charges (`deliveryChargeInsideDhaka`, `deliveryChargeOutsideDhaka`), and active promo/referral coupons list. |
 | [`ProductsContext`](src/context/ProductsContext.jsx) | `flamingo_products` | Reactive product catalog with fallback to initial `PRODUCTS` ([`src/data/products.js`](src/data/products.js)). Provides `addProduct`, `updateProduct`, `toggleStock`, `deleteProduct`, and `resetToDefault`. Cross-tab synced via `storage` event. |
 | [`CartContext`](src/context/CartContext.jsx) | `flamingo_cart` | Shopping bag drawer state, item quantities, subtotal calculation, and clear cart operations. |
@@ -77,18 +78,44 @@
   - Modal displaying official warranty claim memorandum with customer info, product details, claim ID (`CLM-XXXXXX`), and safe return packaging instructions.
   - One-click print/download memo button with dedicated `@media print` CSS.
 
+### `/register` — Customer Registration
+- **Input Fields**: Full Name, Phone (11 digits), Email, Password (min 6 characters).
+- **Auto Login**: On successful registration, account is saved in `flamingo_users`, active customer session is created in `flamingo_current_user`, and user is redirected to `/account`.
+
+### `/login` — Customer Sign-In
+- **Dual Credentials**: Sign in using Phone number or Email address and Password.
+- **Redirect Support**: Honors `?redirect=/checkout` query param so shoppers are returned directly to checkout after signing in.
+- **Prerender Safe**: Wrapped in `<Suspense>` for Next.js App Router query parameter hydration.
+
+### `/account` — Customer Dashboard
+- **Customer Profile**: Displays registered name, phone, email, join date, total orders placed, and lifetime spend.
+- **Matched Order History**: Automatically queries `flamingo_orders` matching user's phone or email address.
+- **Actions**: Direct links to live order tracking (`/track-order?orderId=...`), item-level warranty claims, and one-click logout.
+
 ---
 
 ## 4. Admin Management Routes
 
-### Unified Admin Navigation
-All admin portals share top-level navigation links:
-- ⚙️ **থিম সেটিংস** (`/admin/settings`)
+### Unified Admin Navigation & Header
+All admin portals share a synchronized top-level navigation bar with role detection and active profile badge:
+- ⚙️ **থিম সেটিংস** (`/admin/settings`) — *Super Admin only*
 - 📦 **অর্ডার ম্যানেজমেন্ট** (`/admin/orders`)
 - 💎 **প্রোডাক্ট ক্যাটালগ** (`/admin/products`)
+- 👥 **কাস্টমার CRM** (`/admin/customers`)
 - 🌐 **স্টোরফ্রন্ট** (`/collections`)
+- **Admin Badge & Logout**: Displays logged-in staff name, role tag (`Super Admin` / `Order Moderator`), and one-click logout button.
 
-### `/admin/settings` — Theme & Brand Control Center
+### Role-Based Access Control (RBAC)
+- **Super Admin** (`role: 'superadmin'`): Full access to theme/brand settings, delivery charges, coupons, products, orders, and CRM. Default: `admin` / `password123`.
+- **Order Moderator** (`role: 'moderator'`): Access to orders, products, and CRM. Restricted from `/admin/settings` with a dedicated Access Denied notice. Default: `moderator` / `mod123`.
+
+### `/admin/login` — Staff Authentication Gateway
+- Secure login portal for team members with role identification.
+- One-click **Demo Login** buttons for Super Admin and Order Moderator to ease testing and evaluation.
+- Redirects authenticated staff to `/admin/orders`.
+
+### `/admin/settings` — Theme & Brand Control Center (Super Admin Only)
+- **Role Guard**: Non-superadmin users are presented with an Access Denied screen directing them back to `/admin/orders`.
 - **Branding & Visuals**: Logo URL, interactive slider for logo height, primary color picker, background pastel shade picker, and serif vs. sans-serif typography.
 - **Headlines & Text**: Brand name, tagline, announcement top banner, hero headline, and subheadline.
 - **Delivery Configuration**: Inside Dhaka & Outside Dhaka delivery fees (৳).
@@ -116,6 +143,12 @@ All admin portals share top-level navigation links:
 - **Warranty Configuration**: Enable warranty toggle, duration in days (e.g., 180, 365), and custom warranty text.
 - **Table Controls**: Instant stock toggle button (`In Stock` ↔ `Out of Stock`), edit modal opener, and delete with confirmation.
 - **Catalog Reset**: Restore default catalog from `src/data/products.js` anytime.
+
+### `/admin/customers` — Customer CRM & Marketing Export
+- **Consolidated Customer Registry**: Merges registered members (`flamingo_users`) with guest checkout buyers (`flamingo_orders`), deduplicating by phone and email.
+- **CRM Metrics**: Total customer count, registered member count, repeat customer count, and total customer spend.
+- **Filters & Search**: Instant filter by "All Customers", "Registered Members", or "Guest Buyers", plus search by name, phone, or email.
+- **UTF-8 BOM CSV Export**: One-click download of `flamingo_customers_export_[timestamp].csv` with `\uFEFF` encoding ensuring flawless rendering of Bengali fonts in Microsoft Excel on Windows.
 
 ---
 

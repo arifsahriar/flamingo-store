@@ -4,6 +4,7 @@ import "./globals.css";
 import { CartProvider } from "@/context/CartContext";
 import { SiteConfigProvider } from "@/context/SiteConfigContext";
 import { ProductsProvider } from "@/context/ProductsContext";
+import { AuthProvider } from "@/context/AuthContext";
 import CartDrawer from "@/components/CartDrawer";
 import Footer from "@/components/Footer";
 
@@ -21,17 +22,19 @@ export default function RootLayout({
     <html lang="bn">
       <body className="antialiased flex flex-col min-h-screen">
         <SiteConfigProvider>
-          <ProductsProvider>
-            <CartProvider>
-              <div className="flex-1">
-                {children}
-              </div>
-              <Suspense fallback={null}>
-                <Footer />
-              </Suspense>
-              <CartDrawer />
-            </CartProvider>
-          </ProductsProvider>
+          <AuthProvider>
+            <ProductsProvider>
+              <CartProvider>
+                <div className="flex-1">
+                  {children}
+                </div>
+                <Suspense fallback={null}>
+                  <Footer />
+                </Suspense>
+                <CartDrawer />
+              </CartProvider>
+            </ProductsProvider>
+          </AuthProvider>
         </SiteConfigProvider>
       </body>
     </html>

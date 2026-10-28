@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { useProducts } from '@/context/ProductsContext';
 import { 
   Sparkles, 
@@ -20,18 +22,29 @@ import {
   Image as ImageIcon,
   DollarSign,
   Tag,
-  AlertCircle
+  AlertCircle,
+  Users,
+  LogOut
 } from 'lucide-react';
 
 const CATEGORIES = ['All', 'Necklace', 'Ring', 'Bracelet', 'Earrings'];
 
 export default function AdminProductsPage() {
+  const { currentAdmin, isAuthLoaded, logoutAdmin } = useAuth();
+  const router = useRouter();
   const { products, addProduct, updateProduct, toggleStock, deleteProduct, resetToDefault } = useProducts();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+
+  // Authentication Guard
+  useEffect(() => {
+    if (isAuthLoaded && !currentAdmin) {
+      router.push('/admin/login');
+    }
+  }, [isAuthLoaded, currentAdmin, router]);
 
   // ফর্ম স্টেট
   const [formData, setFormData] = useState({
@@ -153,6 +166,14 @@ export default function AdminProductsPage() {
     }
   };
 
+  if (!isAuthLoaded || !currentAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-xs text-gray-400">
+        অ্যাডমিন প্রমাণীকরণ যাচাই হচ্ছে...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -162,12 +183,18 @@ export default function AdminProductsPage() {
           <div>
             {/* অ্যাডমিন লিংক বার */}
             <div className="flex items-center gap-3 mb-2 text-xs font-semibold">
-              <Link 
-                href="/admin/settings" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
-              </Link>
+              {currentAdmin.role === 'superadmin' ? (
+                <Link 
+                  href="/admin/settings" 
+                  className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+                >
+                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
+                </Link>
+              ) : (
+                <span className="text-gray-400 cursor-not-allowed flex items-center gap-1" title="শুধুমাত্র সুপারঅ্যাডমিন অ্যাক্সেস">
+                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস (লক)
+                </span>
+              )}
               <span className="text-gray-300">|</span>
               <Link 
                 href="/admin/orders" 
@@ -179,6 +206,13 @@ export default function AdminProductsPage() {
               <span className="text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5" /> প্রোডাক্ট ক্যাটালগ
               </span>
+              <span className="text-gray-300">|</span>
+              <Link 
+                href="/admin/customers" 
+                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+              >
+                <Users className="w-3.5 h-3.5" /> কাস্টমার CRM
+              </Link>
               <span className="text-gray-300">|</span>
               <Link 
                 href="/collections" 
@@ -198,7 +232,31 @@ export default function AdminProductsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* অ্যাডমিন প্রোফাইল ব্যাজ ও লগআউট */}
+            <div className="flex items-center gap-2.5 bg-white p-2 sm:px-3 rounded-2xl border border-gray-200 shadow-xs text-xs">
+              <div className="text-right">
+                <div className="font-bold text-gray-900 leading-tight">{currentAdmin.name}</div>
+                <span className={`text-[10px] font-semibold px-2 py-0.2 rounded-md ${
+                  currentAdmin.role === 'superadmin' 
+                    ? 'bg-pink-50 text-pink-700' 
+                    : 'bg-blue-50 text-blue-700'
+                }`}>
+                  {currentAdmin.role === 'superadmin' ? 'Super Admin' : 'Order Moderator'}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  logoutAdmin();
+                  router.push('/admin/login');
+                }}
+                className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                title="লগআউট"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+
             <button
               onClick={handleResetDefaults}
               className="px-3 py-2 bg-white border border-gray-200 hover:bg-gray-100 text-gray-600 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
