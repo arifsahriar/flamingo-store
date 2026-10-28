@@ -75,8 +75,10 @@
   - `remainingDays <= 0`: Expired badge (`মেয়াদ উত্তীর্ণ`) with disabled claim button.
   - No warranty: `"ওয়ারেন্টি প্রযোজ্য নয়"`.
 - **Claim Warranty Invoice & Service Slip Modal**:
-  - Modal displaying official warranty claim memorandum with customer info, product details, claim ID (`CLM-XXXXXX`), and safe return packaging instructions.
-  - One-click print/download memo button with dedicated `@media print` CSS.
+  - Modal displaying official warranty claim memorandum (`#warranty-print-area`) with customer details, order ID, claim ID (`CLM-XXXXXX`), order date, and remaining warranty duration.
+  - Distinct bordered **Return Courier Address box** (প্রাপক: FLAMINGO Silver Care Hub, ধানমন্ডি, ঢাকা, হেল্পলাইন / WhatsApp).
+  - Courier packaging checklist and official signature lines for customer & authorized officer.
+  - Dedicated `@media print` CSS: Hides storefront elements, headers, footers, action buttons (`.no-print`), resets backdrop overlays, and forces 100% pure white background with high-contrast `#000` dark typography for crisp printing and PDF exports.
 
 ### `/register` — Customer Registration
 - **Input Fields**: Full Name, Phone (11 digits), Email, Password (min 6 characters).

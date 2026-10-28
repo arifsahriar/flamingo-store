@@ -133,10 +133,10 @@ function TrackOrderContent() {
 
   return (
     <div 
-      className="min-h-screen py-10 px-4 sm:px-8 transition-colors duration-300"
+      className="min-h-screen py-10 px-4 sm:px-8 transition-colors duration-300 print:p-0 print:m-0 print:bg-white"
       style={{ backgroundColor: config.accentBgColor || '#FFF5F6' }}
     >
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="no-print max-w-4xl mx-auto space-y-8">
         
         {/* টপ ন্যাভবার ও ব্যাক বাটন */}
         <div className="flex items-center justify-between pb-4 border-b border-pink-100">
@@ -406,122 +406,258 @@ function TrackOrderContent() {
           </div>
         )}
 
-        {/* ওয়ারেন্টি ক্লেইম ইনভয়েস / সার্ভিস স্লিপ মোডাল */}
-        {claimModalData && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white max-w-lg w-full rounded-3xl shadow-2xl border border-pink-100 overflow-hidden relative animate-in fade-in zoom-in-95 duration-200">
+      </div> {/* closes .no-print max-w-4xl */}
+
+      {/* ওয়ারেন্টি ক্লেইম ইনভয়েস / সার্ভিস স্লিপ মোডাল */}
+      {claimModalData && (() => {
+        const order = claimModalData.order || {};
+        const item = claimModalData.item || {};
+        const customer = order.customer || {};
+        const customerName = customer.name || customer.customerName || 'সম্মানিত গ্রাহক';
+        const customerPhone = customer.phone || 'N/A';
+        const customerAddress = customer.address || 'ঠিকানা দেওয়া হয়নি';
+        const customerArea = customer.area || customer.district || '';
+        const orderId = order.orderId || order.id || 'N/A';
+        const cleanId = String(orderId).replace('FLM-', '');
+        const claimId = `CLM-${cleanId}`;
+        const claimDate = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
+        const remainingDays = claimModalData.remainingDays;
+        const warrantyText = item.warrantyText || (item.warrantyDays ? `${item.warrantyDays} দিনের ওয়ারেন্টি` : 'অফিসিয়াল সিলভার ওয়ারেন্টি');
+        const expiryDate = item.expiryDateFormatted || (item.expiryTimestamp ? new Date(item.expiryTimestamp).toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' }) : 'সক্রিয়');
+        const itemQty = item.quantity || 1;
+        const itemPrice = item.price || 0;
+        const itemTotal = itemPrice * itemQty;
+
+        // কুরিয়ার রিটার্ন ও হাব ঠিকানা (কনফিগ বা ডিফল্ট ফলব্যাক)
+        const returnRecipient = config.returnRecipient || `${config.brandName || 'FLAMINGO'} Silver Care Hub`;
+        const returnAddress = config.returnAddress || 'বাড়ি নং ১২, রোড নং ৫, ধানমন্ডি, ঢাকা - ১২০৫';
+        const returnPhone = config.returnPhone || config.hotline || config.phone || '01700-000000';
+
+        return (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 print:p-0 print:static print:bg-white print:backdrop-none print:overflow-visible">
+            <div className="bg-white max-w-2xl w-full rounded-3xl shadow-2xl border border-pink-100 overflow-hidden relative animate-in fade-in zoom-in-95 duration-200 print:max-w-none print:w-full print:shadow-none print:border-none print:rounded-none">
               
-              {/* মোডাল হেডার বাটনসমূহ (প্রিন্ট ছাড়া বাকি সময় দৃশ্যমান) */}
-              <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between print:hidden">
+              {/* মোডাল হেডার বাটনসমূহ (নো-প্রিন্ট) */}
+              <div className="no-print p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                 <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
                   <FileText className="w-4 h-4 text-pink-600" /> অফিসিয়াল ওয়ারেন্টি সার্ভিস স্লিপ
                 </span>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handlePrint}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition shadow-xs active:scale-95"
                   >
-                    <Printer className="w-3.5 h-3.5" /> প্রিন্ট / ডাউনলোড মেমো
+                    <Printer className="w-3.5 h-3.5" /> প্রিন্ট / সেভ PDF
                   </button>
                   <button
                     onClick={() => setClaimModalData(null)}
                     className="p-1.5 rounded-xl hover:bg-gray-200 text-gray-500 transition"
+                    title="বন্ধ করুন"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
 
-              {/* প্রিন্টযোগ্য স্লিপ কনটেন্ট */}
-              <div id="printable-warranty-slip" className="p-6 sm:p-8 space-y-5 bg-white text-gray-900 text-xs">
-                {/* স্লিপ হেডার */}
-                <div className="text-center pb-4 border-b-2 border-pink-100 space-y-1">
-                  <h2 className="text-2xl font-serif font-black tracking-wider uppercase" style={{ color: config.primaryColor || '#DB2777' }}>
+              {/* প্রিন্টযোগ্য স্লিপ কনটেন্ট (#warranty-print-area) */}
+              <div 
+                id="warranty-print-area" 
+                className="p-6 sm:p-8 space-y-5 bg-white text-gray-900 text-xs print:p-4 print:space-y-4 print:text-black"
+              >
+                {/* ১. স্লিপ ব্র্যান্ডিং ও শিরোনাম */}
+                <div className="text-center pb-4 border-b-2 border-pink-100 print:border-black space-y-1">
+                  <h2 className="text-2xl sm:text-3xl font-serif font-black tracking-wider uppercase" style={{ color: config.primaryColor || '#DB2777' }}>
                     {config.brandName || 'FLAMINGO'}
                   </h2>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest">
-                    {config.tagline || 'Elegance That Endures'}
+                  <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-widest font-medium print:text-black">
+                    {config.tagline || 'Elegance That Endures'} • 925 Sterling Silver Care
                   </p>
-                  <div className="inline-block mt-2 bg-pink-50 text-pink-700 px-3 py-1 rounded-full text-xs font-bold border border-pink-200">
+                  <div className="inline-block mt-2 bg-pink-50 text-pink-800 print:bg-white print:text-black px-4 py-1 rounded-full text-xs font-bold border border-pink-200 print:border-black">
                     ওয়ারেন্টি সার্ভিস ও রিটার্ন স্লিপ (Warranty Claim Memo)
                   </div>
                 </div>
 
-                {/* ক্লেইম ও অর্ডার পরিচিতি */}
-                <div className="grid grid-cols-2 gap-3 bg-pink-50/30 p-3.5 rounded-2xl border border-pink-100">
-                  <div>
-                    <p className="text-[10px] text-gray-500 uppercase">অর্ডার আইডি</p>
-                    <p className="font-mono font-bold text-gray-900">{claimModalData.order.orderId || claimModalData.order.id}</p>
+                {/* ২. ক্লেইম ও অর্ডার পরিচিতি গ্রিড */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-pink-50/40 print:bg-white p-3.5 rounded-2xl border border-pink-100 print:border-black">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-gray-500 print:text-black uppercase block">অর্ডার আইডি:</span>
+                    <p className="font-mono font-bold text-gray-900 print:text-black text-xs sm:text-sm">{orderId}</p>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-gray-500 uppercase">ক্লেইম আইডি</p>
-                    <p className="font-mono font-bold text-pink-600">
-                      CLM-{String(claimModalData.order.orderId || claimModalData.order.id).replace('FLM-', '')}
-                    </p>
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-gray-500 print:text-black uppercase block">ক্লেইম আইডি:</span>
+                    <p className="font-mono font-bold text-pink-600 print:text-black text-xs sm:text-sm">{claimId}</p>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-gray-500 uppercase">ক্লেইমের তারিখ</p>
-                    <p className="font-medium text-gray-800">
-                      {new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' })}
-                    </p>
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-gray-500 print:text-black uppercase block">ক্লেইমের তারিখ:</span>
+                    <p className="font-semibold text-gray-800 print:text-black text-xs">{claimDate}</p>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-gray-500 uppercase">ওয়ারেন্টি মেয়াদ শেষ</p>
-                    <p className="font-medium text-emerald-700">
-                      {claimModalData.item.expiryDateFormatted || 'সক্রিয়'}
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-gray-500 print:text-black uppercase block">ওয়ারেন্টি স্ট্যাটাস:</span>
+                    <p className="font-bold text-emerald-700 print:text-black text-xs">
+                      সক্রিয় (আর {remainingDays} দিন)
                     </p>
                   </div>
                 </div>
 
-                {/* কাস্টমার তথ্য */}
-                <div className="space-y-1 border-b border-gray-100 pb-3">
-                  <h4 className="font-bold text-gray-900 text-xs uppercase tracking-wider text-pink-600">কাস্টমার তথ্য:</h4>
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <p><strong>নাম:</strong> {claimModalData.order.customer?.name || claimModalData.order.customer?.customerName}</p>
-                    <p><strong>ফোন:</strong> {claimModalData.order.customer?.phone}</p>
-                    <p className="col-span-2"><strong>ঠিকানা:</strong> {claimModalData.order.customer?.address} ({claimModalData.order.customer?.area || claimModalData.order.customer?.district})</p>
+                {/* ৩. কাস্টমার ডেলিভারি তথ্য */}
+                <div className="p-3.5 rounded-2xl border border-gray-200 print:border-black bg-gray-50/40 print:bg-white space-y-1.5">
+                  <div className="flex items-center gap-1.5 font-bold text-gray-900 print:text-black text-xs uppercase tracking-wide border-b border-gray-200 print:border-black pb-1">
+                    <Phone className="w-3.5 h-3.5 text-pink-600 print:text-black" />
+                    <span>কাস্টমার ও ডেলিভারি বিবরণ:</span>
                   </div>
-                </div>
-
-                {/* ক্লেইমকৃত প্রোডাক্ট বিবরণ */}
-                <div className="space-y-2 border-b border-gray-100 pb-3">
-                  <h4 className="font-bold text-gray-900 text-xs uppercase tracking-wider text-pink-600">প্রোডাক্ট ও সেবা বিবরণ:</h4>
-                  <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-0.5">
                     <div>
-                      <p className="font-bold text-gray-900">{claimModalData.item.name}</p>
-                      <p className="text-[10px] text-gray-500">পরিমাণ: {claimModalData.item.quantity} টি | {claimModalData.item.warrantyText}</p>
-                      <p className="text-[10px] text-emerald-600 font-semibold">অবশিষ্ট ওয়ারেন্টি: {claimModalData.remainingDays} দিন</p>
+                      <span className="text-[10px] text-gray-500 print:text-black block">গ্রাহকের নাম:</span>
+                      <strong className="text-gray-900 print:text-black">{customerName}</strong>
                     </div>
-                    <span className="font-mono font-bold text-gray-900">৳ {claimModalData.item.price * claimModalData.item.quantity}</span>
+                    <div>
+                      <span className="text-[10px] text-gray-500 print:text-black block">মোবাইল নম্বর:</span>
+                      <strong className="text-gray-900 print:text-black font-mono">{customerPhone}</strong>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="text-[10px] text-gray-500 print:text-black block">ডেলিভারি ঠিকানা:</span>
+                      <p className="text-gray-800 print:text-black font-medium">
+                        {customerAddress} {customerArea && `(${customerArea})`}
+                      </p>
+                    </div>
+                    {customer.note && (
+                      <div className="sm:col-span-2 pt-1 border-t border-gray-200 print:border-black text-[11px] text-gray-600 print:text-black italic">
+                        <strong>অর্ডার নোট:</strong> {customer.note}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* রিটার্ন প্যাকেজিং ও সার্ভিস নির্দেশনা */}
-                <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-100 text-[11px] text-emerald-900 space-y-1.5">
-                  <div className="flex items-center gap-1.5 font-bold text-emerald-800">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>রিটার্ন ও ফ্রি সার্ভিসিং প্যাকেজিং নির্দেশিকা:</span>
+                {/* ৪. ক্লেইমকৃত প্রোডাক্ট ও সেবা বিবরণ */}
+                <div className="p-3.5 rounded-2xl border border-gray-200 print:border-black bg-gray-50/40 print:bg-white space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-gray-900 print:text-black text-xs uppercase tracking-wide border-b border-gray-200 print:border-black pb-1">
+                    <Sparkles className="w-3.5 h-3.5 text-pink-600 print:text-black" />
+                    <span>সার্ভিসিং ও পলিশিংয়ের জন্য নির্ধারিত গহনা:</span>
                   </div>
-                  <ol className="list-decimal list-inside space-y-1 pl-1 text-[10.5px] leading-relaxed">
-                    <li>গহনাটি মূল বাবল র‍্যাপ বা বক্সে সাবধানে প্যাক করুন যাতে ট্রানজিটে বাঁকা না হয়।</li>
-                    <li>এই সার্ভিস স্লিপটি প্রিন্ট করে পার্সেলের ভেতরে যুক্ত করুন (অথবা অর্ডার আইডি লিখুন)।</li>
-                    <li>আমাদের সাপোর্ট টিমে <strong>{claimModalData.order.customer?.phone}</strong> থেকে মেসেজ দিয়ে পার্সেল পিকআপ বুক করুন।</li>
-                    <li>পার্সেল পৌঁছানোর ৩-৫ কার্যদিবসের মধ্যে পলিশিং/রিপ্লেসমেন্ট সম্পন্ন করে ফেরত পাঠানো হবে।</li>
-                  </ol>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white print:bg-white p-3 rounded-xl border border-gray-200 print:border-black">
+                    <div className="space-y-0.5">
+                      <h4 className="font-bold text-gray-900 print:text-black text-xs sm:text-sm">{item.name}</h4>
+                      <p className="text-[11px] text-gray-600 print:text-black">
+                        পরিমাণ: <strong>{itemQty} টি</strong> • রেগুলার মূল্য: <strong>৳ {itemPrice}</strong> • মোট: <strong>৳ {itemTotal}</strong>
+                      </p>
+                      <div className="flex items-center gap-2 pt-0.5 text-[11px]">
+                        <span className="font-semibold text-pink-700 print:text-black">
+                          {warrantyText}
+                        </span>
+                        <span>•</span>
+                        <span className="font-bold text-emerald-700 print:text-black">
+                          অবশিষ্ট মেয়াদ: আর {remainingDays} দিন (মেয়াদ শেষ: {expiryDate})
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right sm:border-l border-gray-200 print:border-black sm:pl-4">
+                      <span className="text-[10px] text-gray-500 print:text-black block">সার্ভিস ফি:</span>
+                      <span className="font-bold text-emerald-600 print:text-black text-xs sm:text-sm">৳ ০ (ফ্রি ওয়ারেন্টি)</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="pt-2 text-center text-[10px] text-gray-400">
-                  FLAMINGO Official Silver Care • Helpline: 01700-000000 • ঢাকা, বাংলাদেশ
+                {/* ৫. কুরিয়ার রিটার্ন ও হাব ঠিকানা (Return Courier Address) */}
+                <div className="p-4 rounded-2xl border-2 border-dashed border-gray-900 print:border-black bg-gray-50/90 print:bg-white space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-gray-300 print:border-black pb-1.5">
+                    <div className="flex items-center gap-2 font-bold text-gray-900 print:text-black text-xs uppercase tracking-wide">
+                      <Truck className="w-4 h-4 text-pink-600 print:text-black flex-shrink-0" />
+                      <span>গহনা পাঠানোর ঠিকানা (Return Courier Address):</span>
+                    </div>
+                    <span className="text-[10px] font-bold bg-pink-100 text-pink-900 print:bg-white print:text-black px-2.5 py-0.5 rounded-full border border-pink-200 print:border-black">
+                      Silver Care Hub
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs leading-relaxed">
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-500 print:text-black uppercase block">প্রাপক / Care Hub:</span>
+                      <strong className="text-sm font-bold text-gray-900 print:text-black font-serif">
+                        {returnRecipient}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-500 print:text-black uppercase block">হেল্পলাইন / হোয়াটসঅ্যাপ:</span>
+                      <strong className="text-sm font-bold text-gray-900 print:text-black font-mono">
+                        {returnPhone}
+                      </strong>
+                    </div>
+                    <div className="sm:col-span-2 pt-1 border-t border-gray-200 print:border-black">
+                      <span className="text-[10px] font-bold text-gray-500 print:text-black uppercase block">সম্পূর্ণ ঠিকানা:</span>
+                      <p className="font-semibold text-gray-900 print:text-black text-xs sm:text-sm">
+                        {returnAddress}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-gray-600 print:text-black italic pt-1 border-t border-gray-200 print:border-black">
+                    * কুরিয়ার সার্ভিসে (যেমন: Steadfast / RedX / Sundarban / eCourier) পার্সেল বুক করার সময় প্রাপক ও ঠিকানার স্থানে ওপরের তথ্যটি সঠিকভাবে লিখুন।
+                  </p>
+                </div>
+
+                {/* ৬. রিটার্ন ও ফ্রি সার্ভিসিং প্যাকেজিং নির্দেশিকা চেকলিস্ট */}
+                <div className="p-4 rounded-2xl border border-gray-300 print:border-black bg-gray-50/70 print:bg-white space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-gray-900 print:text-black text-xs uppercase tracking-wide border-b border-gray-200 print:border-black pb-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 print:text-black flex-shrink-0" />
+                    <span>রিটার্ন ও ফ্রি সার্ভিসিং প্যাকেজিং নির্দেশিকা চেকলিস্ট:</span>
+                  </div>
+                  <div className="space-y-1.5 text-[11px] leading-relaxed text-gray-800 print:text-black">
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-emerald-700 print:text-black flex-shrink-0 mt-0.5">[✓]</span>
+                      <p>
+                        <strong>সুরক্ষিত মোড়ক:</strong> গহনাটি মূল বাবল র‍্যাপ বা শক্ত জুয়েলারি বক্সে সাবধানে প্যাক করুন যাতে কুরিয়ার ট্রানজিটে কোনো চাপ বা ক্ষতি না হয়।
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-emerald-700 print:text-black flex-shrink-0 mt-0.5">[✓]</span>
+                      <p>
+                        <strong>সার্ভিস মেমো সংযুক্তি:</strong> এই মুদ্রিত সার্ভিস স্লিপটি ভাঁজ করে পার্সেলের ভেতরে দিন (অথবা প্যাকেটের গায়ে স্পষ্ট করে <strong>অর্ডার আইডি: {orderId}</strong> ও <strong>ক্লেইম আইডি: {claimId}</strong> লিখে দিন)।
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-emerald-700 print:text-black flex-shrink-0 mt-0.5">[✓]</span>
+                      <p>
+                        <strong>কুরিয়ার ট্র্যাকিং মেসেজ:</strong> পার্সেল কুরিয়ারে পাঠানোর পর আমাদের হেল্পলাইন / WhatsApp নম্বরে (<strong>{returnPhone}</strong>) ট্র্যাকিং নম্বরটি মেসেজ করুন।
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-emerald-700 print:text-black flex-shrink-0 mt-0.5">[✓]</span>
+                      <p>
+                        <strong>ডেলিভারি নিশ্চয়তা:</strong> কেয়ার হাবে পার্সেল পৌঁছানোর ৩-৫ কার্যদিবসের মধ্যে ফ্রি পলিশিং/রিপ্লেসমেন্ট সম্পন্ন করে আপনার ঠিকানায় পুনরায় ডেলিভারি দেওয়া হবে।
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ৭. অফিসিয়াল সিগনেচার ও সিল */}
+                <div className="pt-6 grid grid-cols-2 gap-8 text-center text-xs">
+                  <div>
+                    <div className="border-t border-gray-400 print:border-black pt-1.5 font-bold text-gray-800 print:text-black">
+                      গ্রাহকের স্বাক্ষর (Customer Signature)
+                    </div>
+                    <span className="text-[10px] text-gray-500 print:text-black">তারিখসহ গ্রাহক স্বাক্ষর করবেন</span>
+                  </div>
+                  <div>
+                    <div className="border-t border-gray-400 print:border-black pt-1.5 font-bold text-gray-800 print:text-black">
+                      অথরাইজড সিল ও স্বাক্ষর (FLAMINGO Care Hub)
+                    </div>
+                    <span className="text-[10px] text-gray-500 print:text-black">অফিসিয়াল সার্ভিস নিশ্চয়তা</span>
+                  </div>
+                </div>
+
+                {/* ৮. ফুটার লাইন */}
+                <div className="pt-3 border-t border-gray-200 print:border-black text-center text-[10px] text-gray-500 print:text-black">
+                  {config.brandName || 'FLAMINGO'} Official Silver Care Hub • Helpline: {returnPhone} • ঢাকা, বাংলাদেশ
                 </div>
               </div>
 
-              {/* ফুটার বাটনসমূহ */}
-              <div className="p-4 bg-gray-50 border-t border-gray-100 flex gap-3 print:hidden">
+              {/* ফুটার অ্যাকশন বাটনসমূহ (নো-প্রিন্ট) */}
+              <div className="no-print p-4 bg-gray-50 border-t border-gray-100 flex gap-3">
                 <button
                   onClick={handlePrint}
-                  className="flex-1 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-pink-600/25"
+                  className="flex-1 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-pink-600/25 active:scale-95"
                 >
-                  <Printer className="w-4 h-4" /> প্রিন্ট / সেভ করুন
+                  <Printer className="w-4 h-4" /> প্রিন্ট / PDF ডাউনলোড করুন
                 </button>
                 <button
                   onClick={() => setClaimModalData(null)}
@@ -533,29 +669,102 @@ function TrackOrderContent() {
 
             </div>
           </div>
-        )}
+        );
+      })()}
 
-      </div>
-
-      {/* প্রিন্ট সিএসএস স্টাইল */}
+      {/* ডেডিকেটেড প্রিন্ট ও PDF স্টাইল */}
       <style jsx global>{`
         @media print {
+          /* A4 সাইজ ও পরিমিত মার্জিন */
+          @page {
+            size: A4 portrait;
+            margin: 10mm 14mm;
+          }
+
+          /* ১. সমস্ত নো-প্রিন্ট এলিমেন্ট সম্পূর্ণ হাইড করা */
+          .no-print,
+          .no-print * {
+            display: none !important;
+          }
+
+          /* ২. বডি ও এইচটিএমএল ১০০% হোয়াইট ও ক্লিন করা */
+          html, body {
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+
+          /* ৩. ফিক্সড ব্যাকড্রপ ও মোডাল ব্লার ক্লিয়ার করা */
+          .fixed,
+          .fixed.inset-0,
+          .backdrop-blur-sm {
+            position: static !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            display: block !important;
+            overflow: visible !important;
+          }
+
+          /* ৪. ডিফল্টভাবে বডির বাকি অংশ হাইড */
           body * {
             visibility: hidden;
           }
-          #printable-warranty-slip,
-          #printable-warranty-slip * {
-            visibility: visible;
+
+          /* ৫. শুধুমাত্র #warranty-print-area ও এর ভেতরের কনটেন্ট দৃশ্যমান */
+          #warranty-print-area,
+          #warranty-print-area * {
+            visibility: visible !important;
           }
-          #printable-warranty-slip {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 24px;
+
+          #warranty-print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #000000 !important;
             box-shadow: none !important;
-            border: 1px solid #e5e7eb !important;
+            border: none !important;
+            display: block !important;
+          }
+
+          /* ৬. ১০০% হাই-কনট্রাস্ট ব্ল্যাক টেক্সট (#000000) নিশ্চিতকরণ */
+          #warranty-print-area,
+          #warranty-print-area p,
+          #warranty-print-area span,
+          #warranty-print-area div,
+          #warranty-print-area h1,
+          #warranty-print-area h2,
+          #warranty-print-area h3,
+          #warranty-print-area h4,
+          #warranty-print-area strong,
+          #warranty-print-area b,
+          #warranty-print-area li,
+          #warranty-print-area td,
+          #warranty-print-area th {
+            color: #000000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* ৭. বর্ডার ও লাইনসমূহ প্রিন্টে স্পষ্ট ও গাঢ় কালো */
+          #warranty-print-area .border,
+          #warranty-print-area .border-t,
+          #warranty-print-area .border-b,
+          #warranty-print-area .border-2 {
+            border-color: #000000 !important;
           }
         }
       `}</style>

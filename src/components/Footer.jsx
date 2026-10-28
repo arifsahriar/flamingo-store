@@ -79,7 +79,7 @@ export default function Footer() {
   };
 
   return (
-    <footer className="bg-white border-t border-pink-100 text-gray-700 text-xs transition-colors">
+    <footer className="no-print print:hidden bg-white border-t border-pink-100 text-gray-700 text-xs transition-colors">
       
       {/* ১. ট্রাস্ট ব্যাজ সেকশন */}
       <div className="border-b border-pink-100/70 bg-[#FFF9FA]">
