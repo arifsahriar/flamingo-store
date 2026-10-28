@@ -1,17 +1,23 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import SwipeCard from '@/components/SwipeCard';
-import { PRODUCTS } from '@/data/products';
 import { useCart } from '@/context/CartContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { useProducts } from '@/context/ProductsContext';
 import { ArrowLeft, RefreshCw, ShoppingBag, Sparkles } from 'lucide-react';
 
 export default function SwipePage() {
-  const [deck, setDeck] = useState(PRODUCTS);
+  const { products } = useProducts();
+  const [deck, setDeck] = useState(products);
   const { addToCart, totalItems, setIsCartOpen } = useCart();
   const { config } = useSiteConfig();
+
+  // যখনই প্রোডাক্ট তালিকা আপডেট হবে, ডেকে সিঙ্ক করা
+  useEffect(() => {
+    setDeck(products);
+  }, [products]);
 
   const handleSwipeLeft = (swipedProduct) => {
     // বামে দিলে কার্ড স্কিপ (Next Card)
@@ -25,7 +31,7 @@ export default function SwipePage() {
   };
 
   const handleReset = () => {
-    setDeck(PRODUCTS);
+    setDeck(products);
   };
 
   return (

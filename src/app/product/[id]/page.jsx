@@ -1,16 +1,23 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useParams } from 'next/navigation';
-import { PRODUCTS } from '@/data/products';
+import { useProducts } from '@/context/ProductsContext';
 import { ShieldCheck, Truck, RotateCcw, Sparkles, ShoppingBag } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 
-export default function ProductDetailPage() {
+function ProductDetailContent() {
   const { addToCart } = useCart();
+  const { getProductById } = useProducts();
   const params = useParams();
-  const product = PRODUCTS.find((p) => p.id === params.id) || PRODUCTS[0];
-  const [selectedImg, setSelectedImg] = useState(product.images[0]);
+  const product = getProductById(params?.id);
+  const [selectedImg, setSelectedImg] = useState(product?.images?.[0] || product?.image);
+
+  useEffect(() => {
+    if (product) {
+      setSelectedImg(product.images?.[0] || product.image);
+    }
+  }, [product]);
 
   return (
     <div className="min-h-screen bg-[#FFF5F6] py-12 px-4 sm:px-6 lg:px-8">
@@ -63,6 +70,12 @@ export default function ProductDetailPage() {
               </p>
 
               <div className="mt-6 border-t border-b border-pink-50 py-4 space-y-2.5">
+                {product.hasWarranty && (
+                  <div className="flex items-center gap-2.5 text-xs text-emerald-800 bg-emerald-50/70 p-2 rounded-xl border border-emerald-100">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span className="font-semibold">{product.warrantyText}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2.5 text-xs text-gray-700">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                   <span>প্রতিটি পিসের সাথে অরিজিনাল ৯২৫ সিলভার সার্টিফিকেট প্রদান করা হয়</span>
@@ -91,5 +104,13 @@ export default function ProductDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProductDetailPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#FFF5F6] flex items-center justify-center text-sm text-gray-500">লোড হচ্ছে...</div>}>
+      <ProductDetailContent />
+    </Suspense>
   );
 }

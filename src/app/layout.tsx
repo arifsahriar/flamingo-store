@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { CartProvider } from "@/context/CartContext";
 import { SiteConfigProvider } from "@/context/SiteConfigContext";
+import { ProductsProvider } from "@/context/ProductsContext";
 import CartDrawer from "@/components/CartDrawer";
+import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
   title: "FLAMINGO | 925 Sterling Silver Jewelry",
@@ -16,12 +19,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="bn">
-      <body className="antialiased">
+      <body className="antialiased flex flex-col min-h-screen">
         <SiteConfigProvider>
-          <CartProvider>
-            {children}
-            <CartDrawer />
-          </CartProvider>
+          <ProductsProvider>
+            <CartProvider>
+              <div className="flex-1">
+                {children}
+              </div>
+              <Suspense fallback={null}>
+                <Footer />
+              </Suspense>
+              <CartDrawer />
+            </CartProvider>
+          </ProductsProvider>
         </SiteConfigProvider>
       </body>
     </html>

@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { useCart } from '@/context/CartContext';
-import { PRODUCTS } from '@/data/products';
+import { useProducts } from '@/context/ProductsContext';
 import { 
   Sparkles, 
   ShoppingBag, 
@@ -17,8 +17,9 @@ import {
 export default function HomePage() {
   const { config } = useSiteConfig();
   const { addToCart, totalItems, setIsCartOpen } = useCart();
+  const { products } = useProducts();
 
-  const featuredProducts = PRODUCTS.slice(0, 4);
+  const featuredProducts = products.slice(0, 4);
 
   return (
     <div 
@@ -58,13 +59,23 @@ export default function HomePage() {
             </div>
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              href="/track-order"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 sm:px-3 py-2 rounded-xl text-gray-700 hover:text-pink-600 hover:bg-pink-50/70 transition"
+              title="অর্ডার ও লাইভ ওয়ারেন্টি ট্র্যাক করুন"
+            >
+              <Truck className="w-3.5 h-3.5 text-pink-600" />
+              <span>অর্ডার ট্র্যাক</span>
+            </Link>
+
             <Link
               href="/collections"
-              className="hidden sm:inline-block text-xs font-semibold px-4 py-2 text-gray-700 hover:text-pink-600 transition"
+              className="hidden sm:inline-block text-xs font-semibold px-3 py-2 text-gray-700 hover:text-pink-600 transition"
             >
               কালেকশন
             </Link>
+
             <Link
               href="/swipe"
               className="text-xs font-semibold px-3.5 py-2 rounded-xl border border-pink-200 text-pink-700 bg-pink-50 hover:bg-pink-100 transition flex items-center gap-1.5"
@@ -164,7 +175,7 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-          {featuredProducts.map((product) => (
+          {featuredProducts.map((product: any) => (
             <div
               key={product.id}
               className="group bg-white rounded-2xl overflow-hidden border border-pink-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"

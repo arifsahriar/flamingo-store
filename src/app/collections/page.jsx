@@ -2,14 +2,15 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { PRODUCTS } from '@/data/products';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { useCart } from '@/context/CartContext';
-import { ShoppingBag, Sparkles, ShieldCheck, Heart } from 'lucide-react';
+import { useProducts } from '@/context/ProductsContext';
+import { ShoppingBag, Sparkles, ShieldCheck, Heart, Truck } from 'lucide-react';
 
 export default function CollectionsPage() {
   const { config } = useSiteConfig();
   const { addToCart, totalItems, setIsCartOpen } = useCart();
+  const { products } = useProducts();
 
   return (
     <div 
@@ -28,27 +29,37 @@ export default function CollectionsPage() {
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-pink-100/60 px-4 sm:px-8 py-4 transition">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
-  {config.logoUrl && (
-    <img 
-      src={config.logoUrl} 
-      alt={config.brandName} 
-      style={{ height: `${config.logoHeight || 44}px` }}
-      className="w-auto object-contain"
-    />
-  )}
-  <div>
-    <span 
-      className="text-xl sm:text-2xl font-serif font-black tracking-wider uppercase block leading-tight" 
-      style={{ color: config.primaryColor }}
-    >
-      {config.brandName}
-    </span>
-    <span className="text-[9px] sm:text-[10px] text-gray-500 tracking-widest uppercase block">
-      {config.tagline}
-    </span>
-  </div>
-</Link>
-          <div className="flex items-center gap-3">
+            {config.logoUrl && (
+              <img 
+                src={config.logoUrl} 
+                alt={config.brandName} 
+                style={{ height: `${config.logoHeight || 44}px` }}
+                className="w-auto object-contain"
+              />
+            )}
+            <div>
+              <span 
+                className="text-xl sm:text-2xl font-serif font-black tracking-wider uppercase block leading-tight" 
+                style={{ color: config.primaryColor }}
+              >
+                {config.brandName}
+              </span>
+              <span className="text-[9px] sm:text-[10px] text-gray-500 tracking-widest uppercase block">
+                {config.tagline}
+              </span>
+            </div>
+          </Link>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              href="/track-order"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 sm:px-3 py-2 rounded-xl text-gray-700 hover:text-pink-600 hover:bg-pink-50/70 transition"
+              title="অর্ডার ও লাইভ ওয়ারেন্টি ট্র্যাক করুন"
+            >
+              <Truck className="w-3.5 h-3.5 text-pink-600" />
+              <span>অর্ডার ট্র্যাক</span>
+            </Link>
+
             <Link
               href="/swipe"
               className="text-xs font-semibold px-3.5 py-2 rounded-xl border border-pink-200 text-pink-700 bg-pink-50 hover:bg-pink-100 transition flex items-center gap-1.5"
@@ -93,20 +104,25 @@ export default function CollectionsPage() {
       {/* ৪. প্রোডাক্ট গ্রিড */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {PRODUCTS.map((product) => (
+          {products.map((product) => (
             <div
               key={product.id}
               className="group bg-white rounded-2xl overflow-hidden border border-pink-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between"
             >
               <Link href={`/product/${product.id}`} className="block relative aspect-square overflow-hidden bg-gray-50">
                 <img
-                  src={product.images ? product.images[0] : product.image}
+                  src={product.images ? product.images[0] : (product.image || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop')}
                   alt={product.name}
                   className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
                 />
                 <span className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm text-[10px] font-bold px-2 py-0.5 rounded-md text-gray-700 shadow-xs">
                   925 Silver
                 </span>
+                {!product.inStock && (
+                  <span className="absolute top-2 right-2 bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs">
+                    স্টক আউট
+                  </span>
+                )}
               </Link>
 
               <div className="p-4 flex-1 flex flex-col justify-between">
@@ -131,14 +147,20 @@ export default function CollectionsPage() {
                     )}
                   </div>
 
-                  <button
-                    onClick={() => addToCart(product, 1)}
-                    className="p-2 rounded-xl text-white shadow-md active:scale-95 transition"
-                    style={{ backgroundColor: config.primaryColor }}
-                    title="ব্যাগে যোগ করুন"
-                  >
-                    <ShoppingBag className="w-4 h-4" />
-                  </button>
+                  {product.inStock ? (
+                    <button
+                      onClick={() => addToCart(product, 1)}
+                      className="p-2 rounded-xl text-white shadow-md active:scale-95 transition"
+                      style={{ backgroundColor: config.primaryColor }}
+                      title="ব্যাগে যোগ করুন"
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-rose-500 bg-rose-50 px-2 py-1 rounded-lg">
+                      স্টক শেষ
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

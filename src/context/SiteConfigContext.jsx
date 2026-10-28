@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-// ডিফল্ট টেক্সট ও কালার
+// ডিফল্ট টেক্সট, কালার, ডেলিভারি চার্জ ও কুপন
 const DEFAULT_CONFIG = {
   logoUrl: '/logo.png',
   logoHeight: 44, // পিক্সেলে লোগোর হাইট
@@ -15,6 +15,16 @@ const DEFAULT_CONFIG = {
   primaryColor: '#db2777', // ফ্ল্যামিঙ্গো পিংক
   accentBgColor: '#fff5f6', // সফট প্যাস্টেল ব্যাকগ্রাউন্ড
   fontFamily: 'serif',
+
+  // ডেলিভারি চার্জ সেটিংস
+  deliveryChargeInsideDhaka: 80,
+  deliveryChargeOutsideDhaka: 130,
+
+  // সক্রিয় কুপন ও রেফারেল কোড
+  coupons: [
+    { code: 'FLAMINGO10', type: 'percentage', discount: 10, note: '১০% ওয়েলকাম ডিসকাউন্ট' },
+    { code: 'REFER50', type: 'flat', discount: 50, note: 'রেফারেল ৫০ টাকা ছাড়' },
+  ],
 };
 
 const SiteConfigContext = createContext();
@@ -26,10 +36,17 @@ export function SiteConfigProvider({ children }) {
     try {
       const saved = localStorage.getItem('flamingo_site_config');
       if (saved) {
-        setConfig(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setConfig({
+          ...DEFAULT_CONFIG,
+          ...parsed,
+          deliveryChargeInsideDhaka: parsed.deliveryChargeInsideDhaka ?? DEFAULT_CONFIG.deliveryChargeInsideDhaka,
+          deliveryChargeOutsideDhaka: parsed.deliveryChargeOutsideDhaka ?? DEFAULT_CONFIG.deliveryChargeOutsideDhaka,
+          coupons: Array.isArray(parsed.coupons) ? parsed.coupons : DEFAULT_CONFIG.coupons,
+        });
       }
     } catch (e) {
-      console.error(e);
+      console.error('Failed to parse flamingo_site_config:', e);
     }
   }, []);
 
@@ -38,7 +55,7 @@ export function SiteConfigProvider({ children }) {
     try {
       localStorage.setItem('flamingo_site_config', JSON.stringify(newConfig));
     } catch (e) {
-      console.error(e);
+      console.error('Failed to save flamingo_site_config:', e);
     }
   };
 
@@ -52,7 +69,7 @@ export function SiteConfigProvider({ children }) {
   };
 
   return (
-    <SiteConfigContext.Provider value={{ config, updateConfig, resetToDefault }}>
+    <SiteConfigContext.Provider value={{ config, updateConfig, resetToDefault, DEFAULT_CONFIG }}>
       <div 
         style={{
           fontFamily: config.fontFamily === 'serif' ? 'serif' : 'sans-serif',
