@@ -31,8 +31,40 @@ import {
   X
 } from 'lucide-react';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
-export const STATUS_OPTIONS = [
+
+// Supabase order -> Admin Order Shape
+const mapSupabaseOrder = (row) => ({
+  id: row.id,
+  orderId: row.id,
+  orderTimestamp: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+  date: row.created_at 
+    ? new Date(row.created_at).toLocaleDateString('bn-BD', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+    : new Date().toLocaleDateString('bn-BD'),
+  customer: {
+    name: row.customer_name,
+    customerName: row.customer_name,
+    phone: row.customer_phone,
+    address: row.customer_address || '',
+    area: row.delivery_city || 'ঢাকা সিটির ভেতরে',
+    district: row.delivery_city || 'ঢাকা',
+    note: '',
+  },
+  items: Array.isArray(row.items) ? row.items : [],
+  subtotal: Math.max(0, (Number(row.total_amount) || 0) - (Number(row.delivery_fee) || 0) + (Number(row.discount_amount) || 0)),
+  cartTotal: Math.max(0, (Number(row.total_amount) || 0) - (Number(row.delivery_fee) || 0) + (Number(row.discount_amount) || 0)),
+  discountAmount: Number(row.discount_amount) || 0,
+  appliedCouponCode: row.coupon_code || null,
+  referredByCode: row.referred_by || null,
+  referralRewardIssued: false,
+  deliveryCharge: Number(row.delivery_fee) || 80,
+  shippingCost: Number(row.delivery_fee) || 80,
+  grandTotal: Number(row.total_amount) || 0,
+  status: row.status || 'নতুন অর্ডার (Pending)',
+});
+
+const STATUS_OPTIONS = [
   'নতুন অর্ডার (Pending)',
   'প্রসেসিং চলছে (Processing)',
   'ডেলিভারিতে পাঠানো হয়েছে (Shipped)',

@@ -6,13 +6,15 @@ import SwipeCard from '@/components/SwipeCard';
 import { useCart } from '@/context/CartContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { useProducts } from '@/context/ProductsContext';
-import { ArrowLeft, RefreshCw, ShoppingBag, Sparkles } from 'lucide-react';
+import { ArrowLeft, RefreshCw, ShoppingBag, Sparkles, User, Shield } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function SwipePage() {
   const { products } = useProducts();
   const [deck, setDeck] = useState(products);
   const { addToCart, totalItems, setIsCartOpen } = useCart();
   const { config } = useSiteConfig();
+  const { currentUser, currentAdmin } = useAuth();
 
   // যখনই প্রোডাক্ট তালিকা আপডেট হবে, ডেকে সিঙ্ক করা
   useEffect(() => {
@@ -65,20 +67,48 @@ export default function SwipePage() {
           </h1>
         </div>
 
-        <button
-          onClick={() => setIsCartOpen(true)}
-          className="relative p-2.5 rounded-xl bg-white border border-pink-100 shadow-sm text-gray-700 hover:text-pink-600 transition"
-        >
-          <ShoppingBag className="w-5 h-5" />
-          {totalItems > 0 && (
-            <span 
-              className="absolute -top-1 -right-1 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold"
-              style={{ backgroundColor: config.primaryColor }}
+        <div className="flex items-center gap-2">
+          {currentAdmin ? (
+            <Link
+              href="/admin/orders"
+              className="p-2.5 rounded-xl bg-white border border-pink-100 shadow-sm text-pink-700 hover:bg-pink-50 transition"
+              title="অ্যাডমিন"
             >
-              {totalItems}
-            </span>
+              <Shield className="w-5 h-5 text-pink-600" />
+            </Link>
+          ) : currentUser ? (
+            <Link
+              href="/account"
+              className="p-2.5 rounded-xl bg-white border border-pink-100 shadow-sm text-pink-700 hover:bg-pink-50 transition"
+              title={currentUser.name}
+            >
+              <User className="w-5 h-5 text-pink-600" />
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              className="p-2.5 rounded-xl bg-white border border-pink-100 shadow-sm text-gray-700 hover:text-pink-600 transition"
+              title="লগইন / একাউন্ট"
+            >
+              <User className="w-5 h-5 text-pink-600" />
+            </Link>
           )}
-        </button>
+
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="relative p-2.5 rounded-xl bg-white border border-pink-100 shadow-sm text-gray-700 hover:text-pink-600 transition"
+          >
+            <ShoppingBag className="w-5 h-5" />
+            {totalItems > 0 && (
+              <span 
+                className="absolute -top-1 -right-1 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold"
+                style={{ backgroundColor: config.primaryColor }}
+              >
+                {totalItems}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* সোয়াইপ এরিয়া */}

@@ -232,6 +232,16 @@ export default function Footer() {
                   <ArrowRight className="w-3 h-3 text-pink-400" /> চেকআউট ও পেমেন্ট
                 </Link>
               </li>
+              <li>
+                <Link href="/account" className="hover:text-pink-600 transition flex items-center gap-1.5 font-semibold text-pink-700">
+                  <ArrowRight className="w-3 h-3 text-pink-400" /> আমার একাউন্ট ও রেফারেল
+                </Link>
+              </li>
+              <li>
+                <Link href="/login" className="hover:text-pink-600 transition flex items-center gap-1.5">
+                  <ArrowRight className="w-3 h-3 text-pink-400" /> কাস্টমার ও স্টাফ লগইন
+                </Link>
+              </li>
             </ul>
           </div>
 

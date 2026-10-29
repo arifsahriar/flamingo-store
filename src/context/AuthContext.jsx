@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 const DEFAULT_STAFF_USERS = [
   {
@@ -34,7 +35,7 @@ export function AuthProvider({ children }) {
   const [currentAdmin, setCurrentAdmin] = useState(null);
   const [isAuthLoaded, setIsAuthLoaded] = useState(false);
 
-  // ব্রাউজার লোড হলে লোকাল স্টোরেজ থেকে অথেনটিকেশন ডাটা রিড করা
+  // ব্রাউজার লোড হলে লোকাল স্টোরেজ ও সুপাবেজ থেকে ডাটা সিঙ্ক করা
   useEffect(() => {
     try {
       // ১. স্টাফ ইউজার ইনিশিয়ালাইজেশন
@@ -47,7 +48,6 @@ export function AuthProvider({ children }) {
       const savedUser = localStorage.getItem('flamingo_current_user');
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
-        // নিশ্চিত করা যাতে রেফারেল কোড ও ভাউচার অ্যারে বজায় থাকে
         if (!parsed.referralCode) {
           parsed.referralCode = generateReferralCode();
           localStorage.setItem('flamingo_current_user', JSON.stringify(parsed));
@@ -66,6 +66,41 @@ export function AuthProvider({ children }) {
       setIsAuthLoaded(true);
     }
 
+    // সুপাবেজ থেকে কাস্টমার তালিকা সিঙ্ক (ব্যাকগ্রাউন্ড)
+    const syncCustomersFromSupabase = async () => {
+      if (!isSupabaseConfigured()) return;
+      try {
+        const { data, error } = await supabase.from('customers').select('*');
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const localUsers = JSON.parse(localStorage.getItem('flamingo_users') || '[]');
+          const userMap = new Map();
+          localUsers.forEach((u) => userMap.set(u.id, u));
+
+          data.forEach((cust) => {
+            const existing = userMap.get(cust.id);
+            userMap.set(cust.id, {
+              id: cust.id,
+              name: cust.name,
+              phone: cust.phone,
+              email: cust.email || '',
+              password: cust.password_hash || existing?.password || '123456',
+              referralCode: cust.referral_code || existing?.referralCode || generateReferralCode(),
+              referredByCode: existing?.referredByCode || null,
+              vouchers: existing?.vouchers || [],
+              createdAt: cust.created_at ? new Date(cust.created_at).toLocaleDateString('bn-BD') : (existing?.createdAt || new Date().toLocaleDateString('bn-BD')),
+            });
+          });
+
+          const merged = Array.from(userMap.values());
+          localStorage.setItem('flamingo_users', JSON.stringify(merged));
+        }
+      } catch (err) {
+        console.warn('Supabase customer sync fallback:', err);
+      }
+    };
+
+    syncCustomersFromSupabase();
+
     // মাল্টি-ট্যাব অথেনটিকেশন সিঙ্ক
     const handleStorage = (e) => {
       if (e.key === 'flamingo_current_user') {
@@ -81,7 +116,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   // --- কাস্টমার রেজিস্ট্রেশন (অটো রেফারেল কোড ও রেফারার ট্র্যাকিংসহ) ---
-  const registerCustomer = ({ name, phone, email, password, referredByCode }) => {
+  const registerCustomer = async ({ name, phone, email, password, referredByCode }) => {
     try {
       const users = JSON.parse(localStorage.getItem('flamingo_users') || '[]');
       
@@ -100,9 +135,10 @@ export function AuthProvider({ children }) {
 
       // নতুন কাস্টমারের জন্য ইউনিক রেফারেল কোড
       const referralCode = generateReferralCode();
+      const newId = 'usr_' + Date.now();
 
       const newUser = {
-        id: 'usr_' + Date.now(),
+        id: newId,
         name: name.trim(),
         phone: cleanPhone,
         email: cleanEmail,
@@ -135,6 +171,25 @@ export function AuthProvider({ children }) {
       localStorage.setItem('flamingo_current_user', JSON.stringify(safeUser));
       setCurrentUser(safeUser);
 
+      // সুপাবেজ ডাটাবেজে ব্যাকগ্রাউন্ডে সেভ
+      if (isSupabaseConfigured()) {
+        try {
+          await supabase.from('customers').insert([
+            {
+              id: newId,
+              name: newUser.name,
+              phone: cleanPhone,
+              email: cleanEmail || null,
+              password_hash: password,
+              referral_code: referralCode,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+        } catch (dbErr) {
+          console.warn('Supabase customer insert offline fallback:', dbErr);
+        }
+      }
+
       return { success: true, user: safeUser };
     } catch (err) {
       console.error('Registration failed:', err);
@@ -143,16 +198,48 @@ export function AuthProvider({ children }) {
   };
 
   // --- কাস্টমার লগইন ---
-  const loginCustomer = ({ identifier, password }) => {
+  const loginCustomer = async ({ identifier, password }) => {
     try {
       const users = JSON.parse(localStorage.getItem('flamingo_users') || '[]');
       const iden = identifier.trim().toLowerCase();
 
-      const matched = users.find(
+      let matched = users.find(
         (u) =>
           (u.phone.toLowerCase() === iden || (u.email && u.email.toLowerCase() === iden)) &&
           u.password === password
       );
+
+      // লোকাল স্টোরেজে না পেলে সুপাবেজে চেক
+      if (!matched && isSupabaseConfigured()) {
+        try {
+          const { data, error } = await supabase
+            .from('customers')
+            .select('*')
+            .or(`phone.eq.${identifier.trim()},email.eq.${iden}`)
+            .limit(1);
+
+          if (!error && data && data.length > 0) {
+            const dbCust = data[0];
+            if (dbCust.password_hash === password) {
+              matched = {
+                id: dbCust.id,
+                name: dbCust.name,
+                phone: dbCust.phone,
+                email: dbCust.email || '',
+                password: dbCust.password_hash,
+                referralCode: dbCust.referral_code || generateReferralCode(),
+                referredByCode: null,
+                vouchers: [],
+                createdAt: dbCust.created_at ? new Date(dbCust.created_at).toLocaleDateString('bn-BD') : new Date().toLocaleDateString('bn-BD'),
+              };
+              users.push(matched);
+              localStorage.setItem('flamingo_users', JSON.stringify(users));
+            }
+          }
+        } catch (dbErr) {
+          console.warn('Supabase customer login query fallback:', dbErr);
+        }
+      }
 
       if (!matched) {
         return { success: false, error: 'মোবাইল/ইমেইল অথবা পাসওয়ার্ড সঠিক নয়!' };
@@ -238,7 +325,7 @@ export function AuthProvider({ children }) {
   };
 
   // --- ইউনিফায়েড স্মার্ট লগইন গেটওয়ে (স্টাফ ও কাস্টমার উভয়ের জন্য) ---
-  const unifiedLogin = ({ identifier, password }) => {
+  const unifiedLogin = async ({ identifier, password }) => {
     try {
       const cleanIden = identifier.trim().toLowerCase();
 
@@ -269,37 +356,13 @@ export function AuthProvider({ children }) {
         };
       }
 
-      // ২. কাস্টমার অ্যাকাউন্ট যাচাই (মোবাইল নম্বর অথবা ইমেইল)
-      const users = JSON.parse(localStorage.getItem('flamingo_users') || '[]');
-      const matchedUser = users.find(
-        (u) =>
-          (u.phone.toLowerCase() === cleanIden || (u.email && u.email.toLowerCase() === cleanIden)) &&
-          u.password === password
-      );
-
-      if (matchedUser) {
-        if (!matchedUser.referralCode) {
-          matchedUser.referralCode = generateReferralCode();
-          localStorage.setItem('flamingo_users', JSON.stringify(users));
-        }
-
-        const safeUser = {
-          id: matchedUser.id,
-          name: matchedUser.name,
-          phone: matchedUser.phone,
-          email: matchedUser.email,
-          referralCode: matchedUser.referralCode,
-          referredByCode: matchedUser.referredByCode || null,
-          vouchers: matchedUser.vouchers || [],
-          createdAt: matchedUser.createdAt,
-        };
-
-        localStorage.setItem('flamingo_current_user', JSON.stringify(safeUser));
-        setCurrentUser(safeUser);
-        return { 
-          success: true, 
-          userType: 'customer', 
-          user: safeUser 
+      // ২. কাস্টমার অ্যাকাউন্ট যাচাই
+      const customerRes = await loginCustomer({ identifier, password });
+      if (customerRes.success) {
+        return {
+          success: true,
+          userType: 'customer',
+          user: customerRes.user,
         };
       }
 
@@ -317,7 +380,7 @@ export function AuthProvider({ children }) {
   };
 
   // --- কাস্টমারকে এক্সক্লুসিভ ভাউচার ইস্যু করার হেল্পার মেথড ---
-  const issueVoucherToCustomer = ({ customerId, customerPhone, voucher }) => {
+  const issueVoucherToCustomer = async ({ customerId, customerPhone, voucher }) => {
     try {
       const users = JSON.parse(localStorage.getItem('flamingo_users') || '[]');
       const globalVouchers = JSON.parse(localStorage.getItem('flamingo_exclusive_vouchers') || '[]');
@@ -342,6 +405,7 @@ export function AuthProvider({ children }) {
         isExclusive: true,
         customerId: customerId || null,
         customerPhone: customerPhone || null,
+        referralCode: voucher.referralCode || null,
         expiryTimestamp,
         expiryDateFormatted,
         note: voucher.note || (type === 'percentage' ? `${discount}% স্পেশাল ছাড়` : `৳${discount} স্পেশাল রিওয়ার্ড ভাউচার`),
@@ -356,7 +420,7 @@ export function AuthProvider({ children }) {
       // ২. টার্গেট ইউজারের একাউন্টে সেভ
       let userUpdated = false;
       const updatedUsers = users.map((u) => {
-        if ((customerId && u.id === customerId) || (customerPhone && u.phone === customerPhone)) {
+        if ((customerId && u.id === customerId) || (customerPhone && u.phone === customerPhone) || (voucher.referralCode && u.referralCode === voucher.referralCode)) {
           userUpdated = true;
           const userVouchers = Array.isArray(u.vouchers) ? u.vouchers : [];
           return {
@@ -381,6 +445,27 @@ export function AuthProvider({ children }) {
         setCurrentUser(updatedCurrentUser);
       }
 
+      // ৪. সুপাবেজ ডাটাবেজে সেভ (public.coupons)
+      if (isSupabaseConfigured()) {
+        try {
+          await supabase.from('coupons').insert([
+            {
+              id: voucherId,
+              code,
+              discount_amount: discount,
+              discount_type: type,
+              min_spend: 0,
+              is_exclusive: true,
+              assigned_user_id: customerId || null,
+              expiry_date: new Date(expiryTimestamp).toISOString(),
+              is_active: true,
+            },
+          ]);
+        } catch (dbErr) {
+          console.warn('Supabase coupon insert fallback:', dbErr);
+        }
+      }
+
       return { success: true, voucher: newVoucher };
     } catch (err) {
       console.error('Error issuing voucher:', err);
@@ -389,7 +474,7 @@ export function AuthProvider({ children }) {
   };
 
   // --- ভাউচার ব্যবহার সম্পন্ন হলে মার্ক করার মেথড ---
-  const markVoucherUsed = ({ voucherCode, customerPhone }) => {
+  const markVoucherUsed = async ({ voucherCode, customerPhone }) => {
     try {
       const code = voucherCode.trim().toUpperCase();
       
@@ -425,6 +510,15 @@ export function AuthProvider({ children }) {
         };
         localStorage.setItem('flamingo_current_user', JSON.stringify(updatedCurrentUser));
         setCurrentUser(updatedCurrentUser);
+      }
+
+      // ৪. সুপাবেজে কুপন ডিঅ্যাক্টিভেট
+      if (isSupabaseConfigured()) {
+        try {
+          await supabase.from('coupons').update({ is_active: false }).eq('code', code);
+        } catch (dbErr) {
+          console.warn('Supabase mark voucher used fallback:', dbErr);
+        }
       }
     } catch (err) {
       console.error('Error marking voucher as used:', err);

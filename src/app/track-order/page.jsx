@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useSiteConfig } from '@/context/SiteConfigContext';
+import { useAuth } from '@/context/AuthContext';
 import { 
   Search, 
   Package, 
@@ -23,11 +24,14 @@ import {
   FileText,
   BadgeAlert,
   Sparkles,
-  ShoppingBag
+  ShoppingBag,
+  User,
+  Shield
 } from 'lucide-react';
 
 function TrackOrderContent() {
   const { config } = useSiteConfig();
+  const { currentUser, currentAdmin } = useAuth();
   const searchParams = useSearchParams();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -139,7 +143,7 @@ function TrackOrderContent() {
       <div className="no-print max-w-4xl mx-auto space-y-8">
         
         {/* টপ ন্যাভবার ও ব্যাক বাটন */}
-        <div className="flex items-center justify-between pb-4 border-b border-pink-100">
+        <div className="flex flex-wrap items-center justify-between pb-4 border-b border-pink-100 gap-3">
           <Link 
             href="/collections" 
             className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-pink-600 transition"
@@ -152,6 +156,33 @@ function TrackOrderContent() {
           >
             {config.brandName || 'FLAMINGO'} অর্ডার ও ওয়ারেন্টি ট্র্যাকার
           </span>
+          <div className="flex items-center gap-2">
+            {currentAdmin ? (
+              <Link
+                href="/admin/orders"
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl text-pink-700 bg-pink-50 border border-pink-200 hover:bg-pink-100 transition shadow-xs"
+              >
+                <Shield className="w-3.5 h-3.5 text-pink-600" />
+                <span>অ্যাডমিন</span>
+              </Link>
+            ) : currentUser ? (
+              <Link
+                href="/account"
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl text-pink-700 bg-pink-50 border border-pink-200 hover:bg-pink-100 transition shadow-xs"
+              >
+                <User className="w-3.5 h-3.5 text-pink-600" />
+                <span>{currentUser.name.split(' ')[0]}</span>
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl text-pink-700 bg-pink-50 border border-pink-200 hover:bg-pink-100 shadow-xs transition"
+              >
+                <User className="w-3.5 h-3.5 text-pink-600" />
+                <span>লগইন / একাউন্ট</span>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* সার্চ হেডার কার্ড */}

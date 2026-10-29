@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { useAuth } from '@/context/AuthContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { 
   ShieldCheck, 
   Truck, 
@@ -23,7 +25,7 @@ import {
   Gift
 } from 'lucide-react';
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const { cart, subtotal, clearCart } = useCart();
   const { config } = useSiteConfig();
   const { currentUser, markVoucherUsed } = useAuth();
@@ -298,6 +300,34 @@ export default function CheckoutPage() {
       localStorage.setItem('flamingo_orders', JSON.stringify([newOrder, ...existingOrders]));
     } catch (err) {
       console.error('Failed to save order to localStorage:', err);
+    }
+
+    // সুপাবেজ ডাটাবেজে লাইভ অর্ডার রাইট (Serial 14: Supabase Database Integration)
+    if (isSupabaseConfigured()) {
+      try {
+        const areaName = isOutsideDhaka ? 'ঢাকা সিটির বাইরে' : 'ঢাকা সিটির ভেতরে';
+        supabase.from('orders').insert([
+          {
+            id: orderId,
+            customer_name: formData.name,
+            customer_phone: formData.phone,
+            customer_address: formData.address,
+            delivery_city: areaName,
+            delivery_fee: deliveryCharge,
+            total_amount: grandTotal,
+            discount_amount: discountAmount,
+            coupon_code: appliedCoupon ? appliedCoupon.code : null,
+            referred_by: cleanReferredBy,
+            status: 'নতুন অর্ডার (Pending)',
+            items: itemsWithWarranty,
+            created_at: new Date(orderTimestamp).toISOString(),
+          },
+        ]).then(({ error }) => {
+          if (error) console.warn('Supabase live order insert fallback:', error.message);
+        }).catch((err) => console.warn('Supabase offline during order creation:', err));
+      } catch (err) {
+        console.warn('Supabase order creation exception:', err);
+      }
     }
 
     setPlacedOrder(newOrder);
@@ -765,5 +795,14 @@ export default function CheckoutPage() {
         )}
       </div>
     </div>
+  );
+}
+
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#FFF5F6] flex items-center justify-center text-xs text-gray-500">চেকআউট পেজ লোড হচ্ছে...</div>}>
+      <CheckoutContent />
+    </Suspense>
   );
 }

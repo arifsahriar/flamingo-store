@@ -1,6 +1,6 @@
+import "./globals.css";
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import "./globals.css";
 import { CartProvider } from "@/context/CartContext";
 import { SiteConfigProvider } from "@/context/SiteConfigContext";
 import { ProductsProvider } from "@/context/ProductsContext";
