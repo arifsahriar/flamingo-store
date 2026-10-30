@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { useAuth } from '@/context/AuthContext';
@@ -22,17 +22,27 @@ import {
   Tag, 
   X, 
   Check,
-  Gift
+  Gift,
+  Wallet,
+  CreditCard,
+  AlertTriangle
 } from 'lucide-react';
+import { getCustomerWallet, debitWalletForPurchase } from '@/lib/walletService';
+import { 
+  getActivePaymentMethods, 
+  getDefaultPaymentMethod, 
+  getPaymentMethodById 
+} from '@/config/paymentMethods';
 
 function CheckoutContent() {
+  const router = useRouter();
   const { cart, subtotal, clearCart } = useCart();
   const { config } = useSiteConfig();
   const { currentUser, markVoucherUsed } = useAuth();
 
-  // ডায়নামিক ডেলিভারি চার্জ (SiteConfig থেকে নেওয়া)
-  const deliveryChargeInside = config.deliveryChargeInsideDhaka ?? 80;
-  const deliveryChargeOutside = config.deliveryChargeOutsideDhaka ?? 130;
+  // ডায়নামিক ডেলিভারি চার্জ (SiteConfig ও PricingSettings থেকে নেওয়া)
+  const deliveryChargeInside = config.pricingSettings?.advance_delivery_inside_city ?? config.deliveryChargeInsideDhaka ?? 80;
+  const deliveryChargeOutside = config.pricingSettings?.advance_delivery_outside_city ?? config.deliveryChargeOutsideDhaka ?? 150;
 
   const [formData, setFormData] = useState({
     name: currentUser?.name || '',
@@ -41,6 +51,26 @@ function CheckoutContent() {
     address: '',
     note: '',
   });
+
+  // প্লাগ-অ্যান্ড-প্লে পেমেন্ট মেথড ইঞ্জিন
+  const activePaymentMethods = getActivePaymentMethods();
+  const defaultPaymentMethod = getDefaultPaymentMethod();
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(defaultPaymentMethod.id);
+  const selectedProvider = getPaymentMethodById(selectedPaymentMethod);
+
+  // মডিউল ৪: ওয়ালেট ব্যালেন্স স্টেট
+  const [wallet, setWallet] = useState({ available_balance: 0, pending_balance: 0 });
+  const [useWallet, setUseWallet] = useState(false);
+  const [walletAmount, setWalletAmount] = useState(0);
+
+  // ওয়ালেট ফেচ
+  useEffect(() => {
+    if (currentUser?.id) {
+      getCustomerWallet(currentUser.id).then((w) => {
+        if (w) setWallet(w);
+      });
+    }
+  }, [currentUser]);
 
   // লগইন ইউজারের ক্ষেত্রে তথ্য স্বয়ংক্রিয় প্রিপপুলেট
   useEffect(() => {
@@ -70,7 +100,20 @@ function CheckoutContent() {
   // ডিসকাউন্ট ক্যালকুলেশন
   const discountAmount = appliedCoupon ? appliedCoupon.discountAmount : 0;
   const discountedSubtotal = Math.max(0, subtotal - discountAmount);
+
+  // মডিউল ৪: ওয়ালেট রিডেম্পশন ক্যালকুলেশন (সর্বোচ্চ ১০০% প্রোডাক্ট মূল্য)
+  const maxWalletRedeemable = Math.min(wallet.available_balance || 0, discountedSubtotal);
+  const actualWalletUsed = useWallet 
+    ? (walletAmount > 0 ? Math.min(walletAmount, maxWalletRedeemable) : maxWalletRedeemable) 
+    : 0;
+
+  // ওয়ালেট কাটার পর বাকি প্রোডাক্ট মূল্য
+  const remainingProductPrice = Math.max(0, discountedSubtotal - actualWalletUsed);
   const grandTotal = discountedSubtotal + (cart.length > 0 ? deliveryCharge : 0);
+
+  // ক্যাশ অন ডেলিভারিতে প্রদেয় মোট পরিমাণ (Net COD Amount) = প্রোডাক্টের বাকি মূল্য + ডেলিভারি চার্জ
+  const netCodPayable = remainingProductPrice + (cart.length > 0 ? deliveryCharge : 0);
+  const productDueOnDelivery = netCodPayable;
 
   // সাবটোটাল পরিবর্তন হলে কুপন ডিসকাউন্ট রি-ক্যালকুলেট
   useEffect(() => {
@@ -177,8 +220,67 @@ function CheckoutContent() {
       return;
     }
 
-    // গ্লোবাল কুপন প্রয়োগ
+    // গ্লোবাল / টার্গেটেড কুপন প্রয়োগ ও ভ্যালিডেশন
     if (matchedGlobalCoupon) {
+      if (matchedGlobalCoupon.isActive === false) {
+        setCouponError('দুঃখিত, এই কুপনটি বর্তমানে সক্রিয় নেই!');
+        return;
+      }
+
+      // ১. সর্বনিম্ন অর্ডার মূল্য যাচাই (Min Order Value)
+      const minOrderVal = Number(matchedGlobalCoupon.minOrderValue) || 0;
+      if (minOrderVal > 0 && subtotal < minOrderVal) {
+        setCouponError(`এই কুপনটি ব্যবহার করতে সর্বনিম্ন ৳ ${minOrderVal} টাকার অর্ডার করতে হবে। (বর্তমান সাবটোটাল: ৳ ${subtotal})`);
+        return;
+      }
+
+      const userPhone = (currentUser?.phone || formData.phone || '').trim();
+      const userId = currentUser?.id || null;
+      const userEmail = (currentUser?.email || '').trim().toLowerCase();
+
+      // ২. নির্দিষ্ট কাস্টমার টার্গেটিং যাচাই (Target Audience: INDIVIDUAL)
+      if (matchedGlobalCoupon.targetAudience === 'INDIVIDUAL') {
+        const assignedPhone = (matchedGlobalCoupon.assignedCustomerPhone || '').trim();
+        const assignedId = matchedGlobalCoupon.assignedCustomerId || matchedGlobalCoupon.assigned_user_id || null;
+        const assignedEmail = (matchedGlobalCoupon.assignedCustomerEmail || '').trim().toLowerCase();
+
+        const cleanPhone = (p) => (p || '').replace(/[^0-9]/g, '').slice(-10);
+
+        const phoneMatches = assignedPhone && userPhone && cleanPhone(assignedPhone) === cleanPhone(userPhone);
+        const idMatches = assignedId && userId && assignedId === userId;
+        const emailMatches = assignedEmail && userEmail && assignedEmail === userEmail;
+
+        if (!phoneMatches && !idMatches && !emailMatches) {
+          setCouponError('দুঃখিত, এই কুপনটি শুধুমাত্র নির্দিষ্ট কাস্টমারের জন্য বরাদ্দ। আপনার অ্যাকাউন্টে এটি প্রযোজ্য নয়।');
+          return;
+        }
+      }
+
+      // ৩. ব্যবহারের সীমাবদ্ধতা যাচাই (Usage Limit per User)
+      const usageLimit = Number(matchedGlobalCoupon.usageLimitPerUser) || 1;
+      try {
+        const storedOrders = JSON.parse(localStorage.getItem('flamingo_orders') || '[]');
+        const previousRedemptions = storedOrders.filter((ord) => {
+          const ordCode = (ord.appliedCouponCode || ord.coupon?.code || '').toUpperCase();
+          if (ordCode !== trimmedCode) return false;
+          const ordPhone = (ord.customer?.phone || '').trim();
+          const ordId = ord.customer?.id;
+          return (userPhone && ordPhone === userPhone) || (userId && ordId === userId);
+        }).length;
+
+        const inUsedList = Array.isArray(matchedGlobalCoupon.usedByUsers) && (
+          (userPhone && matchedGlobalCoupon.usedByUsers.includes(userPhone)) ||
+          (userId && matchedGlobalCoupon.usedByUsers.includes(userId))
+        );
+
+        if (previousRedemptions >= usageLimit || (inUsedList && usageLimit === 1)) {
+          setCouponError(`দুঃখিত, আপনি ইতোমধ্যে এই কুপনটি ব্যবহার করেছেন (ব্যবহারের সর্বোচ্চ সীমা: ${usageLimit} বার)!`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking coupon usage limit:', err);
+      }
+
       let calculatedDiscount = 0;
       if (matchedGlobalCoupon.type === 'percentage') {
         calculatedDiscount = Math.round((subtotal * matchedGlobalCoupon.discount) / 100);
@@ -188,7 +290,7 @@ function CheckoutContent() {
 
       setAppliedCoupon({
         ...matchedGlobalCoupon,
-        isExclusive: false,
+        isExclusive: matchedGlobalCoupon.targetAudience === 'INDIVIDUAL' || Boolean(matchedGlobalCoupon.isExclusive),
         discountAmount: calculatedDiscount,
       });
       setCouponSuccess(`কুপন "${matchedGlobalCoupon.code}" সফলভাবে প্রয়োগ করা হয়েছে! ৳ ${calculatedDiscount} ছাড় পাওয়া গেছে।`);
@@ -204,136 +306,260 @@ function CheckoutContent() {
     setCouponSuccess('');
   };
 
-  const handleSubmitOrder = (e) => {
+  const handleSubmitOrder = async (e) => {
     e.preventDefault();
     if (cart.length === 0) return;
 
     setIsSubmitting(true);
 
-    const orderTimestamp = Date.now();
-    const randomCode = Math.floor(100000 + Math.random() * 900000);
-    const orderId = `FLM-${randomCode}`;
-
-    // আইটেম-লেভেল ওয়ারেন্টি এক্সপায়ারি টাইমস্ট্যাম্প ক্যালকুলেশন
-    const itemsWithWarranty = cart.map((item) => {
-      const days = typeof item.warrantyDays === 'number' ? item.warrantyDays : (item.hasWarranty ? 180 : 0);
-      const expiryTimestamp = days > 0 ? orderTimestamp + days * 86400000 : null;
-
-      return {
-        ...item,
-        hasWarranty: Boolean(item.hasWarranty && days > 0),
-        warrantyDays: days,
-        warrantyText: item.warrantyText || (days > 0 ? `${days} দিনের ফ্রি পলিশিং ওয়ারেন্টি` : 'কোনো ওয়ারেন্টি নেই'),
-        orderTimestamp,
-        expiryTimestamp,
-        expiryDateFormatted: expiryTimestamp
-          ? new Date(expiryTimestamp).toLocaleDateString('bn-BD', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })
-          : null,
-      };
-    });
-
-    const formattedDate = new Date(orderTimestamp).toLocaleDateString('bn-BD', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    const areaLabel = isOutsideDhaka 
-      ? `ঢাকা সিটির বাইরে / সমগ্র বাংলাদেশ (৳${deliveryChargeOutside})` 
-      : `ঢাকা সিটির ভেতরে (৳${deliveryChargeInside})`;
-
-    // রেফারেল ট্র্যাকিং কোড
-    const referredByCode = currentUser?.referredByCode || null;
-
-    const newOrder = {
-      id: orderId,
-      orderId,
-      orderTimestamp,
-      date: formattedDate,
-      customer: {
-        name: formData.name,
-        customerName: formData.name,
-        phone: formData.phone,
-        area: areaLabel,
-        district: areaLabel,
-        address: formData.address,
-        note: formData.note || '',
-      },
-      items: itemsWithWarranty,
-      subtotal,
-      cartTotal: subtotal,
-      discountAmount,
-      appliedCouponCode: appliedCoupon ? appliedCoupon.code : null,
-      coupon: appliedCoupon ? {
-        code: appliedCoupon.code,
-        type: appliedCoupon.type,
-        discount: appliedCoupon.discount,
-        discountAmount: appliedCoupon.discountAmount,
-        note: appliedCoupon.note || '',
-        isExclusive: Boolean(appliedCoupon.isExclusive),
-      } : null,
-      referredByCode: referredByCode,
-      referralRewardIssued: false,
-      deliveryCharge,
-      shippingCost: deliveryCharge,
-      grandTotal,
-      status: 'নতুন অর্ডার (Pending)',
-    };
-
-    // যদি এক্সক্লুসিভ ভাউচার ব্যবহার করা হয়ে থাকে, তা ব্যবহৃত মার্ক করা
-    if (appliedCoupon && appliedCoupon.isExclusive) {
-      markVoucherUsed({
-        voucherCode: appliedCoupon.code,
-        customerPhone: formData.phone,
-      });
-    }
-
-    // লোকাল স্টোরেজে অর্ডার জমা রাখা
     try {
-      const existingOrders = JSON.parse(localStorage.getItem('flamingo_orders') || '[]');
-      localStorage.setItem('flamingo_orders', JSON.stringify([newOrder, ...existingOrders]));
-    } catch (err) {
-      console.error('Failed to save order to localStorage:', err);
-    }
+      const orderTimestamp = Date.now();
+      const randomCode = Math.floor(100000 + Math.random() * 900000);
+      const orderId = `FLM-${randomCode}`;
 
-    // সুপাবেজ ডাটাবেজে লাইভ অর্ডার রাইট (Serial 14: Supabase Database Integration)
-    if (isSupabaseConfigured()) {
-      try {
-        const areaName = isOutsideDhaka ? 'ঢাকা সিটির বাইরে' : 'ঢাকা সিটির ভেতরে';
-        supabase.from('orders').insert([
-          {
-            id: orderId,
-            customer_name: formData.name,
-            customer_phone: formData.phone,
-            customer_address: formData.address,
-            delivery_city: areaName,
-            delivery_fee: deliveryCharge,
-            total_amount: grandTotal,
-            discount_amount: discountAmount,
-            coupon_code: appliedCoupon ? appliedCoupon.code : null,
-            referred_by: cleanReferredBy,
-            status: 'নতুন অর্ডার (Pending)',
-            items: itemsWithWarranty,
-            created_at: new Date(orderTimestamp).toISOString(),
-          },
-        ]).then(({ error }) => {
-          if (error) console.warn('Supabase live order insert fallback:', error.message);
-        }).catch((err) => console.warn('Supabase offline during order creation:', err));
-      } catch (err) {
-        console.warn('Supabase order creation exception:', err);
+      // ডিজিটাল গেটওয়ে এক্সিকিউশন হ্যান্ডলার (ভবিষ্যৎ গেটওয়ে ইন্টিগ্রেশন)
+      if (selectedProvider && selectedProvider.type === 'digital') {
+        const payRes = await selectedProvider.executePayment({
+          orderId,
+          totalAmount: netCodPayable,
+          customer: formData,
+        });
+
+        if (!payRes.success) {
+          alert(payRes.error || 'পেমেন্ট গেটওয়ে প্রক্রিয়াকরণে সমস্যা হয়েছে। দয়া করে ক্যাশ অন ডেলিভারি সিলেক্ট করুন।');
+          return;
+        }
+
+        if (payRes.redirectUrl) {
+          window.location.href = payRes.redirectUrl;
+          return;
+        }
       }
-    }
 
-    setPlacedOrder(newOrder);
-    setOrderPlaced(true);
-    clearCart();
-    setIsSubmitting(false);
+      // মডিউল ৪: যদি ওয়ালেট ব্যালেন্স প্রয়োগ করা হয়, তবে ব্যালেন্স ডেবিট করা
+      if (actualWalletUsed > 0 && currentUser?.id) {
+        const debitRes = await debitWalletForPurchase({
+          userId: currentUser.id,
+          orderId,
+          amount: actualWalletUsed,
+        });
+
+        if (!debitRes.success) {
+          alert(debitRes.error || 'ওয়ালেট ব্যালেন্স ডেবিট ব্যর্থ হয়েছে।');
+          return;
+        }
+      }
+
+      // আইটেম-লেভেল ওয়ারেন্টি ও ডাইনামিক রিটার্ন পলিসি সংরক্ষণ
+      const itemsWithWarranty = cart.map((item) => {
+        const days = typeof item.warrantyDays === 'number' ? item.warrantyDays : (item.hasWarranty ? 180 : 0);
+        const expiryTimestamp = days > 0 ? orderTimestamp + days * 86400000 : null;
+        const returnPolicyType = item.returnPolicyType || item.return_policy_type || 'NO_RETURN';
+        const returnDays = typeof item.returnDays === 'number' ? item.returnDays : Number(item.return_days || 0);
+
+        return {
+          ...item,
+          returnPolicyType,
+          return_policy_type: returnPolicyType,
+          returnDays,
+          return_days: returnDays,
+          hasWarranty: Boolean(item.hasWarranty && days > 0),
+          warrantyDays: days,
+          warrantyText: item.warrantyText || item.warranty_text || (days > 0 ? `${days} দিনের ফ্রি পলিশিং ওয়ারেন্টি` : ''),
+          warranty_text: item.warrantyText || item.warranty_text || '',
+          orderTimestamp,
+          expiryTimestamp,
+          expiryDateFormatted: expiryTimestamp
+            ? new Date(expiryTimestamp).toLocaleDateString('bn-BD', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })
+            : null,
+        };
+      });
+
+      const formattedDate = new Date(orderTimestamp).toLocaleDateString('bn-BD', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      const areaLabel = isOutsideDhaka 
+        ? `ঢাকা সিটির বাইরে / সমগ্র বাংলাদেশ (৳${deliveryChargeOutside})` 
+        : `ঢাকা সিটির ভেতরে (৳${deliveryChargeInside})`;
+
+      const areaName = isOutsideDhaka ? 'ঢাকা সিটির বাইরে' : 'ঢাকা সিটির ভেতরে';
+
+      // রেফারেল ট্র্যাকিং কোড
+      const referredByCode = currentUser?.referredByCode || null;
+
+      const newOrder = {
+        id: orderId,
+        orderId,
+        orderTimestamp,
+        date: formattedDate,
+        customer: {
+          name: formData.name,
+          customerName: formData.name,
+          phone: formData.phone,
+          area: areaLabel,
+          district: areaLabel,
+          address: formData.address,
+          note: formData.note || '',
+        },
+        items: itemsWithWarranty,
+        subtotal,
+        cartTotal: subtotal,
+        discountAmount,
+        appliedCouponCode: appliedCoupon ? appliedCoupon.code : null,
+        coupon: appliedCoupon ? {
+          code: appliedCoupon.code,
+          type: appliedCoupon.type,
+          discount: appliedCoupon.discount,
+          discountAmount: appliedCoupon.discountAmount,
+          note: appliedCoupon.note || '',
+          isExclusive: Boolean(appliedCoupon.isExclusive),
+        } : null,
+        referredByCode: referredByCode,
+        referralRewardIssued: false,
+        deliveryCharge,
+        shippingCost: deliveryCharge,
+        grandTotal,
+        // মডিউলার পেমেন্ট ও ওয়ালেট মেটাডাটা
+        walletUsedAmount: actualWalletUsed,
+        remainingProductPrice,
+        netPayableCod: netCodPayable,
+        netCodPayable,
+        dueOnDelivery: netCodPayable,
+        // ক্যাশ অন ডেলিভারির ক্ষেত্রে কোনো বাধ্যতামূলক অগ্রিম পেমেন্ট নেই
+        advance_paid_amount: 0,
+        advance_trx_id: null,
+        advance_payment_method: null,
+        payment_method: selectedPaymentMethod || 'COD',
+        paymentMethod: selectedPaymentMethod || 'COD',
+        paymentMethodName: selectedProvider?.name || 'ক্যাশ অন ডেলিভারি (Cash on Delivery)',
+        payment_status: selectedProvider?.type === 'offline' ? 'unpaid' : 'pending',
+        paymentStatus: selectedProvider?.type === 'offline' ? 'unpaid' : 'pending',
+        order_status: 'pending',
+        status: 'নতুন অর্ডার (Pending)',
+        delivered_at: null,
+        mlm_processed: false,
+      };
+
+      // যদি কুপন বা ভাউচার ব্যবহার করা হয়ে থাকে, তা ব্যবহৃত মার্ক ও ট্র্যাকিং করা
+      if (appliedCoupon) {
+        if (appliedCoupon.isExclusive) {
+          markVoucherUsed({
+            voucherCode: appliedCoupon.code,
+            customerPhone: formData.phone,
+          });
+        }
+
+        // সাইট কনফিগ কুপন ট্র্যাকিং আপডেট (usedCount ও usedByUsers)
+        try {
+          const storedConfig = JSON.parse(localStorage.getItem('flamingo_site_config') || '{}');
+          if (Array.isArray(storedConfig.coupons)) {
+            const userPhone = formData.phone.trim();
+            const userId = currentUser?.id;
+            const updatedCoupons = storedConfig.coupons.map((c) => {
+              if (c.code.toUpperCase() === (appliedCoupon.code || '').toUpperCase()) {
+                const prevUsers = Array.isArray(c.usedByUsers) ? c.usedByUsers : [];
+                const nextUsers = [...prevUsers];
+                if (userPhone && !nextUsers.includes(userPhone)) nextUsers.push(userPhone);
+                if (userId && !nextUsers.includes(userId)) nextUsers.push(userId);
+                return {
+                  ...c,
+                  usedCount: (Number(c.usedCount) || 0) + 1,
+                  usedByUsers: nextUsers,
+                };
+              }
+              return c;
+            });
+            storedConfig.coupons = updatedCoupons;
+            localStorage.setItem('flamingo_site_config', JSON.stringify(storedConfig));
+          }
+        } catch (couponTrackErr) {
+          console.warn('Coupon redemption tracking fallback:', couponTrackErr);
+        }
+      }
+
+      // লোকাল স্টোরেজে অর্ডার জমা রাখা
+      try {
+        const existingOrders = JSON.parse(localStorage.getItem('flamingo_orders') || '[]');
+        localStorage.setItem('flamingo_orders', JSON.stringify([newOrder, ...existingOrders]));
+      } catch (err) {
+        console.error('Failed to save order to localStorage:', err);
+      }
+
+      // সুপাবেজ ডাটাবেজে লাইভ অর্ডার রাইট (Serial 14 & Modules 1-4)
+      if (isSupabaseConfigured()) {
+        try {
+          const { error: insertError } = await supabase.from('orders').insert([
+            {
+              id: orderId,
+              customer_name: formData.name,
+              customer_phone: formData.phone,
+              customer_address: formData.address,
+              delivery_city: areaName,
+              delivery_fee: deliveryCharge,
+              total_amount: grandTotal,
+              discount_amount: discountAmount,
+              coupon_code: appliedCoupon ? appliedCoupon.code : null,
+              referred_by: referredByCode,
+              wallet_used_amount: actualWalletUsed,
+              advance_paid_amount: 0,
+              advance_trx_id: null,
+              advance_payment_method: null,
+              payment_method: selectedPaymentMethod || 'COD',
+              payment_status: selectedProvider?.type === 'offline' ? 'unpaid' : 'pending',
+              order_status: 'pending',
+              status: 'নতুন অর্ডার (Pending)',
+              items: itemsWithWarranty,
+              created_at: new Date(orderTimestamp).toISOString(),
+            },
+          ]);
+
+          if (insertError) {
+            console.warn('Supabase primary order insert warning, trying core column fallback:', insertError.message);
+            // Fallback insert with guaranteed baseline schema columns
+            await supabase.from('orders').insert([
+              {
+                id: orderId,
+                customer_name: formData.name,
+                customer_phone: formData.phone,
+                customer_address: formData.address,
+                delivery_city: areaName,
+                delivery_fee: deliveryCharge,
+                total_amount: grandTotal,
+                discount_amount: discountAmount,
+                coupon_code: appliedCoupon ? appliedCoupon.code : null,
+                referred_by: referredByCode,
+                status: 'নতুন অর্ডার (Pending)',
+                items: itemsWithWarranty,
+                created_at: new Date(orderTimestamp).toISOString(),
+              },
+            ]);
+          }
+        } catch (err) {
+          console.warn('Supabase offline or order insert exception:', err);
+        }
+      }
+
+      setPlacedOrder(newOrder);
+      setOrderPlaced(true);
+      clearCart();
+
+      // মসৃণভাবে অর্ডার কনফার্মেশন পেজে রিডাইরেক্ট
+      router.push(`/order-success/${orderId}`);
+    } catch (error) {
+      console.error('Fatal order submission error:', error);
+      alert(error?.message || 'অর্ডার সম্পন্ন করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // অর্ডার কনফার্মেশন স্ক্রিন
@@ -419,7 +645,7 @@ function CheckoutContent() {
 
             <div className="pt-2 border-t border-pink-100 space-y-1.5">
               <div className="flex justify-between text-gray-600">
-                <span>সাবটোটাল:</span>
+                <span>প্রোডাক্ট সাবটোটাল:</span>
                 <span>৳ {placedOrder.subtotal}</span>
               </div>
               {placedOrder.discountAmount > 0 && (
@@ -428,13 +654,27 @@ function CheckoutContent() {
                   <span>-৳ {placedOrder.discountAmount}</span>
                 </div>
               )}
+              {placedOrder.walletUsedAmount > 0 && (
+                <div className="flex justify-between text-purple-700 font-semibold">
+                  <span>ওয়ালেট ব্যালেন্স পরিশোধ:</span>
+                  <span>-৳ {placedOrder.walletUsedAmount}</span>
+                </div>
+              )}
               <div className="flex justify-between text-gray-600">
                 <span>ডেলিভারি চার্জ:</span>
                 <span>৳ {placedOrder.deliveryCharge}</span>
               </div>
-              <div className="flex justify-between font-bold text-sm text-gray-900 pt-1 border-t border-pink-200">
-                <span>সর্বমোট প্রদেয়:</span>
-                <span className="text-pink-600 font-mono text-base">৳ {placedOrder.grandTotal}</span>
+              <div className="flex justify-between text-gray-700 font-semibold">
+                <span>পেমেন্ট মাধ্যম:</span>
+                <span className="font-bold text-pink-600">
+                  {placedOrder.paymentMethodName || placedOrder.payment_method || 'ক্যাশ অন ডেলিভারি (COD)'}
+                </span>
+              </div>
+              <div className="flex justify-between font-bold text-sm text-gray-900 pt-2 border-t border-pink-200">
+                <span>ডেলিভারির সময় ক্যাশ প্রদেয় (Cash Due):</span>
+                <span className="text-pink-600 font-mono text-base">
+                  ৳ {placedOrder.dueOnDelivery ?? placedOrder.netPayableCod ?? placedOrder.grandTotal}
+                </span>
               </div>
             </div>
           </div>
@@ -625,11 +865,69 @@ function CheckoutContent() {
                 </div>
               </div>
 
-              <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-2.5 text-[11px] text-emerald-800">
-                <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                <span>
-                  <strong>ক্যাশ অন ডেলিভারি নিশ্চয়তা:</strong> কোনো অগ্রিম পেমেন্ট ছাড়াই পার্সেল হাতে পেয়ে সম্পূর্ণ মূল্য পরিশোধ করবেন।
-                </span>
+              {/* প্লাগ-অ্যান্ড-প্লে পেমেন্ট মাধ্যম সিলেকশন */}
+              <div className="p-4 sm:p-5 bg-white rounded-3xl border border-pink-100 shadow-sm space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <label className="text-xs font-bold text-gray-900 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-pink-600" />
+                    <span>পেমেন্ট মাধ্যম (Payment Method) *</span>
+                  </label>
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-bold border border-emerald-200">
+                    {activePaymentMethods.length === 1 ? 'ক্যাশ অন ডেলিভারি' : 'পছন্দমতো নির্বাচন করুন'}
+                  </span>
+                </div>
+
+                {/* ডাইনামিক পেমেন্ট প্রোভাইডার তালিকা */}
+                <div className="space-y-2.5">
+                  {activePaymentMethods.map((method) => {
+                    const isSelected = selectedPaymentMethod === method.id;
+                    return (
+                      <div
+                        key={method.id}
+                        onClick={() => setSelectedPaymentMethod(method.id)}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
+                          isSelected
+                            ? 'border-pink-600 bg-pink-50/60 ring-2 ring-pink-500/20 shadow-xs'
+                            : 'border-gray-200 bg-white hover:bg-gray-50/70'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full border mt-0.5 flex items-center justify-center flex-shrink-0 ${
+                          isSelected ? 'border-pink-600 bg-pink-600' : 'border-gray-300'
+                        }`}>
+                          {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-xs text-gray-900">{method.name}</span>
+                            {method.badge && (
+                              <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold whitespace-nowrap ${
+                                isSelected
+                                  ? 'bg-pink-100 text-pink-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {method.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                            {method.subtitle}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* COD নির্ভরতা ও আশ্বস্তকরণ বার্তা */}
+                {selectedProvider.id === 'COD' && (
+                  <div className="p-3 bg-emerald-50/80 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <p className="text-[11px] leading-relaxed">
+                      কোনো অগ্রিম চার্জ নেই! পার্সেল হাতে পেয়ে খুলে দেখে মূল্য ও ডেলিভারি চার্জ ক্যাশে পরিশোধ করুন।
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -678,6 +976,52 @@ function CheckoutContent() {
                     </div>
                   ))}
                 </div>
+
+                {/* মডিউল ৪: ওয়ালেট ব্যালেন্স রিডেম্পশন বক্স (Customer Wallet Redemption) */}
+                {currentUser && (wallet.available_balance || 0) > 0 && (
+                  <div className="pt-3 border-t border-pink-50">
+                    <div className="p-3.5 bg-gradient-to-br from-purple-50 to-pink-50/50 rounded-2xl border border-purple-200/80 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-purple-900 font-bold text-xs">
+                          <Wallet className="w-4 h-4 text-purple-600" />
+                          <span>ওয়ালেট ব্যালেন্স রিডেম্পশন</span>
+                        </div>
+                        <span className="font-mono font-bold text-xs text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
+                          ব্যালেন্স: ৳ {wallet.available_balance}
+                        </span>
+                      </div>
+
+                      <label className="flex items-start gap-2.5 cursor-pointer text-xs text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={useWallet}
+                          onChange={(e) => {
+                            setUseWallet(e.target.checked);
+                            if (e.target.checked) {
+                              setWalletAmount(maxWalletRedeemable);
+                            }
+                          }}
+                          className="mt-0.5 rounded border-purple-300 text-purple-600 focus:ring-purple-500 w-4 h-4"
+                        />
+                        <div>
+                          <span className="font-semibold text-gray-900">
+                            পণ্য মূল্য পরিশোধে ওয়ালেট ব্যালেন্স ব্যবহার করুন (সর্বোচ্চ ১০০% প্রোডাক্ট মূল্য)
+                          </span>
+                          <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">
+                            এই অর্ডার থেকে সর্বোচ্চ <strong className="font-mono text-purple-700 font-bold">৳ {maxWalletRedeemable}</strong> ব্যবহার করা যাবে (ডেলিভারি চার্জ ব্যতীত)।
+                          </p>
+                        </div>
+                      </label>
+
+                      {useWallet && (
+                        <div className="flex items-center justify-between pt-2 border-t border-purple-100 text-xs">
+                          <span className="text-purple-800 font-bold">প্রয়োগকৃত ওয়ালেট ছাড়:</span>
+                          <span className="font-mono font-black text-purple-700 text-sm">-৳ {actualWalletUsed}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* প্রোমো / রেফারেল কুপন ইনপুট বক্স (নতুন Serial 10) */}
                 <div className="pt-3 border-t border-pink-50">
@@ -761,15 +1105,36 @@ function CheckoutContent() {
                     </div>
                   )}
 
+                  {actualWalletUsed > 0 && (
+                    <div className="flex justify-between text-purple-700 font-semibold bg-purple-50/60 p-1.5 rounded-lg border border-purple-100">
+                      <span>ওয়ালেট ব্যালেন্স পরিশোধ:</span>
+                      <span className="font-mono">-৳ {actualWalletUsed}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between text-gray-600">
-                    <span>ডেলিভারি চার্জ:</span>
+                    <span>ডেলিভারি চার্জ ({isOutsideDhaka ? 'ঢাকার বাইরে' : 'ঢাকা সিটির ভেতরে'}):</span>
                     <span className="font-semibold font-mono">৳ {deliveryCharge}</span>
                   </div>
 
-                  <div className="flex justify-between font-bold text-sm text-gray-900 pt-2 border-t border-pink-100">
-                    <span>মোট প্রদেয় টাকা:</span>
-                    <span className="text-base font-mono" style={{ color: config.primaryColor || '#DB2777' }}>
-                      ৳ {grandTotal}
+                  <div className="flex justify-between text-gray-500 pt-1 border-t border-gray-100">
+                    <span>সর্বমোট অর্ডার মূল্য:</span>
+                    <span className="font-mono">৳ {grandTotal}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center font-bold text-sm text-gray-900 pt-2 border-t border-pink-200 bg-pink-50/60 p-3 rounded-2xl">
+                    <div>
+                      <span className="block text-gray-900">
+                        {selectedProvider.id === 'COD' ? 'সর্বমোট ক্যাশ অন ডেলিভারিতে প্রদেয়:' : 'পেমেন্ট গেটওয়েতে প্রদেয়:'}
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-normal">
+                        {selectedProvider.id === 'COD' 
+                          ? 'পার্সেল রিসিভ করার সময় ক্যাশে পরিশোধ করবেন' 
+                          : `${selectedProvider.name} দিয়ে সরাসরি পরিশোধ করবেন`}
+                      </span>
+                    </div>
+                    <span className="text-xl font-mono text-pink-600 font-black">
+                      ৳ {netCodPayable}
                     </span>
                   </div>
                 </div>
@@ -784,7 +1149,11 @@ function CheckoutContent() {
                     'অর্ডার প্রসেস হচ্ছে...'
                   ) : (
                     <>
-                      <span>অর্ডার কনফার্ম করুন (৳ {grandTotal})</span>
+                      <span>
+                        {selectedProvider.id === 'COD'
+                          ? `অর্ডার কনফার্ম করুন (ক্যাশ অন ডেলিভারি: ৳ ${netCodPayable})`
+                          : `পেমেন্ট করে অর্ডার কনফার্ম করুন (৳ ${netCodPayable})`}
+                      </span>
                       <ArrowLeft className="w-4 h-4 rotate-180" />
                     </>
                   )}

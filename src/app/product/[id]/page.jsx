@@ -15,7 +15,8 @@ import {
   ShoppingBag, 
   ArrowLeft,
   User,
-  Shield
+  Shield,
+  AlertCircle
 } from 'lucide-react';
 
 function ProductDetailContent() {
@@ -177,10 +178,10 @@ function ProductDetailContent() {
                 </p>
 
                 <div className="mt-6 border-t border-b border-pink-50 py-4 space-y-2.5">
-                  {product.hasWarranty && (
+                  {(product.warrantyText || product.warranty_text) && (
                     <div className="flex items-center gap-2.5 text-xs text-emerald-800 bg-emerald-50/70 p-2 rounded-xl border border-emerald-100">
                       <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                      <span className="font-semibold">{product.warrantyText}</span>
+                      <span className="font-semibold">{product.warrantyText || product.warranty_text}</span>
                     </div>
                   )}
                   <div className="flex items-center gap-2.5 text-xs text-gray-700">
@@ -193,7 +194,11 @@ function ProductDetailContent() {
                   </div>
                   <div className="flex items-center gap-2.5 text-xs text-gray-700">
                     <RotateCcw className="w-4 h-4 text-pink-600 flex-shrink-0" />
-                    <span>৭ দিনের সহজ রিপ্লেসমেন্ট পলিসি</span>
+                    <span>
+                      {(product.returnPolicyType === 'RETURNABLE' || product.return_policy_type === 'RETURNABLE') && (Number(product.returnDays || product.return_days) > 0)
+                        ? `${product.returnDays || product.return_days} দিনের সহজ রিটার্ন পলিসি`
+                        : 'ডেলিভারি গ্রহণের সময় চেক করে রিসিভ করুন'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -205,6 +210,43 @@ function ProductDetailContent() {
                 >
                   <ShoppingBag className="w-5 h-5" /> ব্যাগে যোগ করুন (Add to Cart)
                 </button>
+
+                {/* ডাইনামিক রিটার্ন পলিসি ও ট্রাস্ট ব্যাজ */}
+                <div className="mt-4 space-y-2">
+                  {(product.returnPolicyType === 'RETURNABLE' || product.return_policy_type === 'RETURNABLE') && (Number(product.returnDays || product.return_days) > 0) ? (
+                    <div className="p-3.5 rounded-2xl bg-blue-50/80 border border-blue-200 flex items-start gap-2.5 text-xs text-blue-900 shadow-2xs">
+                      <RotateCcw className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-xs block">
+                          {product.returnDays || product.return_days} দিনের রিটার্ন পলিসি
+                        </span>
+                        <p className="text-[11px] text-blue-700 mt-0.5">
+                          {product.returnDays || product.return_days} দিনের রিটার্ন পলিসি (পণ্য রিটার্ন কুরিয়ার চার্জ গ্রাহককে বহন করতে হবে)।
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-950 shadow-2xs">
+                      <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-xs block">নো-রিটার্ন পলিসি</span>
+                        <p className="text-[11px] text-amber-800 mt-0.5">
+                          চেক করে রিসিভ করুন, পরবর্তীতে কোনো রিটার্ন প্রযোজ্য নয়।
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(product.warrantyText || product.warranty_text) && (
+                    <div className="p-3 rounded-2xl bg-emerald-50/80 border border-emerald-200 flex items-center gap-2.5 text-xs text-emerald-900 shadow-2xs">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-bold">ওয়ারেন্টি সুবিধা: </span>
+                        <span className="text-emerald-800">{product.warrantyText || product.warranty_text}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
             </div>

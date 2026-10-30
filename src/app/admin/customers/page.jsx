@@ -23,7 +23,9 @@ import {
   UserPlus,
   DollarSign,
   Gift,
-  X
+  X,
+  Tag,
+  Percent
 } from 'lucide-react';
 
 export default function AdminCustomersPage() {
@@ -210,19 +212,33 @@ export default function AdminCustomersPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-gray-200 gap-4">
           <div>
             {/* অ্যাডমিন লিংক বার */}
-            <div className="flex items-center gap-3 mb-2 text-xs font-semibold">
+            <div className="flex flex-wrap items-center gap-2.5 mb-2 text-xs font-semibold">
+              <Link 
+                href="/admin/settings?tab=theme" 
+                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+              >
+                <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
+              </Link>
+              <span className="text-gray-300">|</span>
               {currentAdmin.role === 'superadmin' ? (
                 <Link 
-                  href="/admin/settings" 
+                  href="/admin/settings?tab=business" 
                   className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
                 >
-                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
+                  <Percent className="w-3.5 h-3.5" /> বিজনেস মার্জিন
                 </Link>
               ) : (
                 <span className="text-gray-400 cursor-not-allowed flex items-center gap-1" title="শুধুমাত্র সুপারঅ্যাডমিন অ্যাক্সেস">
-                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস (লক)
+                  <Percent className="w-3.5 h-3.5" /> মার্জিন (লক)
                 </span>
               )}
+              <span className="text-gray-300">|</span>
+              <Link 
+                href="/admin/settings?tab=coupons" 
+                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+              >
+                <Tag className="w-3.5 h-3.5" /> কুপন ও মার্কেটিং
+              </Link>
               <span className="text-gray-300">|</span>
               <Link 
                 href="/admin/orders" 

@@ -25,8 +25,18 @@ import {
   Share2,
   Tag,
   CheckCircle2,
-  Users
+  Users,
+  Wallet,
+  ArrowDownRight,
+  ArrowUpRight,
+  History
 } from 'lucide-react';
+import { 
+  getCustomerWallet, 
+  getWalletTransactions, 
+  getUserReferralCommissions, 
+  processMaturedCommissions 
+} from '@/lib/walletService';
 
 export default function AccountPage() {
   const router = useRouter();
@@ -42,6 +52,11 @@ export default function AccountPage() {
     totalVouchers: 0,
   });
   const [userVouchers, setUserVouchers] = useState([]);
+
+  // মডিউল ৪: ওয়ালেট ব্যালেন্স ও লেজার স্টেট
+  const [wallet, setWallet] = useState({ available_balance: 0, pending_balance: 0 });
+  const [transactions, setTransactions] = useState([]);
+  const [commissions, setCommissions] = useState([]);
 
   // রুট গার্ড: কাস্টমার লগইন না থাকলে /login এ রিডাইরেক্ট
   useEffect(() => {
@@ -100,6 +115,13 @@ export default function AccountPage() {
           totalVouchers: combinedVouchers.length,
         });
 
+        // ওয়ালেট ও লেনদেন লেজার লোড (মডিউল ৩ ও ৪)
+        processMaturedCommissions().then(() => {
+          getCustomerWallet(currentUser.id).then((w) => setWallet(w || { available_balance: 0, pending_balance: 0 }));
+          getWalletTransactions(currentUser.id).then((t) => setTransactions(t || []));
+          getUserReferralCommissions(currentUser.id).then((c) => setCommissions(c || []));
+        });
+
       } catch (e) {
         console.error('Failed to load user account data:', e);
       }
@@ -149,6 +171,23 @@ export default function AccountPage() {
   };
 
   const totalSpent = orders.reduce((sum, ord) => sum + (Number(ord.grandTotal) || 0), 0);
+
+  // মোট ডিসকাউন্ট ও সাশ্রয় (ভাউচার ও অর্ডার ডিসকাউন্ট)
+  const totalOrderDiscounts = orders.reduce(
+    (sum, ord) => sum + (Number(ord.discountAmount) || Number(ord.discount_amount) || 0),
+    0
+  );
+
+  // মোট অর্জিত রেফারেল আয় (ওয়ালেট ব্যালেন্স + শপিংয়ে ব্যবহৃত মোট ব্যালেন্স)
+  const totalLifetimeReferralEarnings =
+    (Number(wallet.available_balance) || 0) +
+    (Number(wallet.pending_balance) || 0) +
+    transactions
+      .filter((t) => t.transaction_type === 'DEBIT_PURCHASE')
+      .reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
+
+  // আপনার মোট সাশ্রয় ও লাভ (ডিসকাউন্ট + রেফারেল নেটওয়ার্ক আয়)
+  const totalSavingsAndBenefits = totalOrderDiscounts + totalLifetimeReferralEarnings;
 
   return (
     <div 
@@ -221,16 +260,10 @@ export default function AccountPage() {
                   <span>{currentUser.email}</span>
                 </p>
               )}
-              {currentUser.createdAt && (
-                <p className="flex items-center gap-2 text-gray-400 text-[11px]">
-                  <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  <span>যোগদানের তারিখ: {currentUser.createdAt}</span>
-                </p>
-              )}
             </div>
           </div>
 
-          {/* স্ট্যাটস কার্ডস (অর্ডার, খরচ, রেফারেল ও ভাউচার) */}
+          {/* স্ট্যাটস কার্ডস (অর্ডার, সাশ্রয় ও লাভ, রেফারেল ও ভাউচার) */}
           <div className="md:col-span-7 grid grid-cols-2 sm:grid-cols-2 gap-4">
             <div className="bg-white p-5 rounded-3xl border border-pink-100 shadow-sm flex flex-col justify-between">
               <div className="flex items-center justify-between text-gray-500 text-xs mb-1">
@@ -243,14 +276,14 @@ export default function AccountPage() {
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-pink-100 shadow-sm flex flex-col justify-between">
-              <div className="flex items-center justify-between text-gray-500 text-xs mb-1">
-                <span>মোট কেনাকাটা</span>
+            <div className="bg-white p-5 rounded-3xl border border-pink-100 shadow-sm flex flex-col justify-between bg-gradient-to-br from-white to-pink-50/20">
+              <div className="flex items-center justify-between text-gray-600 text-xs mb-1">
+                <span className="font-semibold text-gray-800">আপনার মোট সাশ্রয় ও লাভ</span>
                 <Sparkles className="w-4 h-4 text-pink-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold font-mono text-pink-600">৳ {totalSpent.toLocaleString('en-US')}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">৯২৫ সিলভার জুয়েলারি</p>
+                <p className="text-2xl font-bold font-mono text-pink-600">৳ {totalSavingsAndBenefits.toLocaleString('en-US')}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">ডিসকাউন্ট ও রেফারেল মিলিয়ে আপনার মোট লাভ।</p>
               </div>
             </div>
 
@@ -277,6 +310,177 @@ export default function AccountPage() {
             </div>
           </div>
 
+        </div>
+
+        {/* মডিউল ৪: কাস্টমার ওয়ালেট ও লেজার সেকশন (Customer Wallet & Ledger) */}
+        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-pink-200 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center">
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <h2 className="text-lg font-serif font-bold text-gray-900">
+                  আমার ওয়ালেট ও রেফারেল আয় (Wallet & Commissions)
+                </h2>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                আপনার খরচযোগ্য ব্যালেন্স চেকআউটে পণ্য কেনাকাটায় ১০০% ব্যবহারযোগ্য। ডেলিভারি কুলিং শেষে (রিটার্ন পলিসি ও সেফটি বাফার মেয়াদান্তে) পেন্ডিং ব্যালেন্স স্বয়ংক্রিয় যুক্ত হয়।
+              </p>
+            </div>
+
+            <Link
+              href="/collections"
+              className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-95 flex items-center gap-1.5 w-fit"
+            >
+              <span>শপিংয়ে ব্যবহার করুন</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          {/* ওয়ালেট কার্ডসমূহ */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* খরচযোগ্য ব্যালেন্স */}
+            <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-white border border-emerald-200 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-xs text-emerald-800 font-semibold">
+                <span>খরচযোগ্য ব্যালেন্স (Available)</span>
+                <span className="p-1 rounded-lg bg-emerald-100 text-emerald-700">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <p className="text-3xl font-black font-mono text-emerald-600">
+                ৳ {(wallet.available_balance || 0).toLocaleString()}
+              </p>
+              <p className="text-[11px] text-gray-500">
+                চেকআউট কার্ট প্রোডাক্ট বিলের ১০০% পর্যন্ত পরিশোধযোগ্য
+              </p>
+            </div>
+
+            {/* কুলিং পেন্ডিং ব্যালেন্স */}
+            <div className="p-5 rounded-2xl bg-gradient-to-br from-purple-50 to-white border border-purple-200 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-xs text-purple-900 font-semibold">
+                <span>পেন্ডিং কমিশন (Cooling Window)</span>
+                <span className="p-1 rounded-lg bg-purple-100 text-purple-700">
+                  <Clock className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <p className="text-3xl font-black font-mono text-purple-700">
+                ৳ {(wallet.pending_balance || 0).toLocaleString()}
+              </p>
+              <p className="text-[11px] text-gray-500">
+                পণ্য রিটার্ন পলিসি অনুযায়ী ডেলিভারি কুলিং উইন্ডো চলমান
+              </p>
+            </div>
+
+            {/* মোট অর্জিত কমিশন */}
+            <div className="p-5 rounded-2xl bg-gradient-to-br from-pink-50 to-white border border-pink-200 shadow-2xs space-y-2 sm:col-span-2 lg:col-span-1">
+              <div className="flex items-center justify-between text-xs text-pink-900 font-semibold">
+                <span>মোট রেফারেল আয় (Lifetime)</span>
+                <span className="p-1 rounded-lg bg-pink-100 text-pink-700">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </span>
+              </div>
+              <p className="text-3xl font-black font-mono text-pink-600">
+                ৳ {((wallet.available_balance || 0) + (wallet.pending_balance || 0) + transactions.filter(t => t.transaction_type === 'DEBIT_PURCHASE').reduce((sum, t) => sum + Math.abs(t.amount || 0), 0)).toLocaleString()}
+              </p>
+              <p className="text-[11px] text-gray-500">
+                আপনার রেফারেল নেটওয়ার্ক ও টিম থেকে মোট অর্জিত আয়
+              </p>
+            </div>
+          </div>
+
+          {/* পেন্ডিং রিলিজ কমিশনসমূহ (কুলিং উইন্ডো তালিকা) */}
+          {commissions.filter(c => c.status === 'pending_release').length > 0 && (
+            <div className="space-y-2 bg-purple-50/50 p-4 rounded-2xl border border-purple-200">
+              <h4 className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-purple-600" />
+                কুলিংয়ে থাকা পেন্ডিং কমিশন তালিকা ({commissions.filter(c => c.status === 'pending_release').length} টি):
+              </h4>
+              <div className="space-y-2">
+                {commissions.filter(c => c.status === 'pending_release').map((comm) => (
+                  <div key={comm.id} className="p-3 bg-white rounded-xl border border-purple-100 flex flex-wrap justify-between items-center text-xs gap-2">
+                    <div>
+                      <span className="font-bold text-gray-900">অর্ডার: {comm.order_id}</span>
+                      <span className="text-gray-500 ml-2">টিম লেভেল {comm.tier_level} ({comm.commission_percentage}%)</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-bold text-purple-700">+৳ {comm.commission_amount}</span>
+                      <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-medium">
+                        রিলিজ: {new Date(comm.release_due_at).toLocaleString('bn-BD')}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ওয়ালেট লেনদেন লেজার (Wallet Transactions Ledger) */}
+          <div className="space-y-3 pt-2">
+            <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+              <History className="w-3.5 h-3.5 text-pink-600" />
+              ওয়ালেট লেনদেন লেজার হিস্ট্রি (Transactions Ledger)
+            </h3>
+
+            {transactions.length === 0 ? (
+              <div className="text-center py-6 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-xs text-gray-400">
+                এখনো কোনো ওয়ালেট লেনদেন সম্পন্ন হয়নি। আপনার রেফারেল কোড বন্ধুদের সাথে শেয়ার করে আয় শুরু করুন।
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-gray-100">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 text-[10px] uppercase font-semibold">
+                    <tr>
+                      <th className="py-2.5 px-3">তারিখ ও সময়</th>
+                      <th className="py-2.5 px-3">লেনদেন প্রকার</th>
+                      <th className="py-2.5 px-3">অর্ডার রেফারেন্স</th>
+                      <th className="py-2.5 px-3">বিবরণ</th>
+                      <th className="py-2.5 px-3 text-right">পরিমাণ (BDT)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {transactions.map((tx) => {
+                      const isCredit = tx.amount > 0;
+                      return (
+                        <tr key={tx.id} className="hover:bg-gray-50/50">
+                          <td className="py-2.5 px-3 text-gray-500 whitespace-nowrap text-[11px]">
+                            {new Date(tx.created_at).toLocaleString('bn-BD')}
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              tx.transaction_type === 'CREDIT_REFERRAL'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : tx.transaction_type === 'DEBIT_PURCHASE'
+                                ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}>
+                              {isCredit ? <ArrowUpRight className="w-3 h-3 text-emerald-600" /> : <ArrowDownRight className="w-3 h-3 text-purple-600" />}
+                              <span>
+                                {tx.transaction_type === 'CREDIT_REFERRAL' ? 'রেফারেল ক্রেডিট' :
+                                 tx.transaction_type === 'DEBIT_PURCHASE' ? 'প্রোডাক্ট ক্রয়' :
+                                 tx.transaction_type === 'VOID_RETURN' ? 'রিটার্ন বাতিল' : tx.transaction_type}
+                              </span>
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-gray-700">
+                            {tx.reference_order_id || 'N/A'}
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-600 text-[11px]">
+                            {tx.description}
+                          </td>
+                          <td className={`py-2.5 px-3 font-mono font-bold text-right text-xs ${
+                            isCredit ? 'text-emerald-600' : 'text-rose-600'
+                          }`}>
+                            {isCredit ? `+৳ ${tx.amount.toLocaleString()}` : `-৳ ${Math.abs(tx.amount).toLocaleString()}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* রেফারেল কোড ও শেয়ারিং বক্স (Customer Referral Box) */}

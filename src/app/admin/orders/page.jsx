@@ -28,17 +28,35 @@ import {
   Users,
   LogOut,
   Gift,
+  RotateCcw,
   X
 } from 'lucide-react';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-
+import { 
+  confirmOrderDelivery, 
+  voidOrderCommissions, 
+  processMaturedCommissions 
+} from '@/lib/walletService';
 
 // Supabase order -> Admin Order Shape
 const mapSupabaseOrder = (row) => ({
   id: row.id,
   orderId: row.id,
   orderTimestamp: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+  delivered_at: row.delivered_at || null,
+  mlm_processed: Boolean(row.mlm_processed),
+  walletUsedAmount: Number(row.wallet_used_amount) || 0,
+  advancePaidAmount: Number(row.advance_paid_amount) || 0,
+  advanceTrxId: row.advance_trx_id || null,
+  advancePaymentMethod: row.advance_payment_method || null,
+  payment_method: row.payment_method || (row.advance_trx_id ? 'Advance' : 'COD'),
+  paymentMethod: row.payment_method || (row.advance_trx_id ? 'Advance' : 'COD'),
+  payment_status: row.payment_status || (row.advance_trx_id ? 'paid' : 'unpaid'),
+  paymentStatus: row.payment_status || (row.advance_trx_id ? 'paid' : 'unpaid'),
+  order_status: row.order_status || 'pending',
+  netPayableCod: Math.max(0, (Number(row.total_amount) || 0) - (Number(row.wallet_used_amount) || 0) - (Number(row.advance_paid_amount) || 0)),
+  dueOnDelivery: Math.max(0, (Number(row.total_amount) || 0) - (Number(row.wallet_used_amount) || 0) - (Number(row.advance_paid_amount) || 0)),
   date: row.created_at 
     ? new Date(row.created_at).toLocaleDateString('bn-BD', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
     : new Date().toLocaleDateString('bn-BD'),
@@ -69,6 +87,7 @@ const STATUS_OPTIONS = [
   'প্রসেসিং চলছে (Processing)',
   'ডেলিভারিতে পাঠানো হয়েছে (Shipped)',
   'ডেলিভারি সম্পন্ন (Delivered)',
+  'পণ্য রিটার্ন করা হয়েছে (Returned)',
   'বাতিল করা হয়েছে (Cancelled)',
 ];
 
@@ -97,7 +116,7 @@ export default function AdminOrdersPage() {
     }
   }, [isAuthLoaded, currentAdmin, router]);
 
-  // লোকাল স্টোরেজ থেকে অর্ডার লোড করা
+  // লোকাল স্টোরেজ থেকে অর্ডার লোড করা এবং মেয়াদোত্তীর্ণ ৭২ ঘণ্টার কমিশন প্রসেস করা
   useEffect(() => {
     try {
       const saved = localStorage.getItem('flamingo_orders');
@@ -107,19 +126,123 @@ export default function AdminOrdersPage() {
     } catch (e) {
       console.error('Error loading orders from localStorage:', e);
     }
+    // ৭২ ঘণ্টার মেয়াদোত্তীর্ণ কমিশন স্বয়ংক্রিয় প্রসেসিং
+    processMaturedCommissions();
   }, []);
 
-  // স্ট্যাটাস পরিবর্তন করা
-  const handleStatusChange = (orderId, newStatus) => {
+  // স্ট্যাটাস পরিবর্তন করা (ডেলিভারি ও ক্যান্সেলেশন লাইফসাইকেল সিঙ্ক)
+  const handleStatusChange = async (orderId, newStatus) => {
+    const targetOrder = orders.find((o) => (o.orderId || o.id) === orderId);
+    let deliveredAt = targetOrder?.delivered_at || null;
+    let mlmReleaseDueAt = targetOrder?.mlm_release_due_at || null;
+    let mlmCoolingHours = targetOrder?.mlm_cooling_hours || 24;
+
+    if (newStatus.includes('Delivered') || newStatus.includes('ডেলিভারি সম্পন্ন')) {
+      deliveredAt = deliveredAt || new Date().toISOString();
+      const itemTotal = Number(targetOrder?.subtotal || targetOrder?.cartTotal || 0);
+      const hasDiscount = Boolean(Number(targetOrder?.discountAmount) > 0 || targetOrder?.appliedCouponCode);
+      
+      const res = await confirmOrderDelivery({
+        orderId,
+        orderItemTotal: itemTotal,
+        buyerUserId: targetOrder?.customer?.id || null,
+        buyerPhone: targetOrder?.customer?.phone || '',
+        buyerReferralCode: targetOrder?.referredByCode || null,
+        hasDiscountOrCoupon: hasDiscount,
+        items: targetOrder?.items || [],
+      });
+      mlmReleaseDueAt = res.releaseDueAt;
+      mlmCoolingHours = res.coolingHours;
+    } else if (newStatus.includes('Cancelled') || newStatus.includes('বাতিল') || newStatus.includes('Returned') || newStatus.includes('রিটার্ন')) {
+      // অর্ডার বাতিল বা রিটার্ন হলে পেন্ডিং কমিশন স্বয়ংক্রিয় বাতিল (VOID_RETURN)
+      await voidOrderCommissions(orderId);
+    }
+
     const updated = orders.map((ord) => {
       const currentId = ord.orderId || ord.id;
-      return currentId === orderId ? { ...ord, status: newStatus } : ord;
+      return currentId === orderId 
+        ? { 
+            ...ord, 
+            status: newStatus, 
+            delivered_at: deliveredAt,
+            mlm_release_due_at: mlmReleaseDueAt,
+            mlm_cooling_hours: mlmCoolingHours,
+          } 
+        : ord;
     });
     setOrders(updated);
     try {
       localStorage.setItem('flamingo_orders', JSON.stringify(updated));
     } catch (e) {
       console.error('Error saving updated status:', e);
+    }
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from('orders').update({
+          status: newStatus,
+          delivered_at: deliveredAt,
+        }).eq('id', orderId);
+      } catch (err) {}
+    }
+  };
+
+  // মডিউল ৩: সরাসরি "Confirm Delivery" অ্যাকশন হ্যান্ডলার (ডাইনামিক রিটার্ন পলিসি ও কুলিং উইন্ডোসহ)
+  const handleConfirmDelivery = async (order) => {
+    const orderId = order.orderId || order.id;
+    const nowIso = new Date().toISOString();
+    const itemTotal = Number(order.subtotal || order.cartTotal || 0);
+    const hasDiscount = Boolean(Number(order.discountAmount) > 0 || order.appliedCouponCode);
+
+    const deliveryResult = await confirmOrderDelivery({
+      orderId,
+      orderItemTotal: itemTotal,
+      buyerUserId: order.customer?.id || null,
+      buyerPhone: order.customer?.phone || '',
+      buyerReferralCode: order.referredByCode || null,
+      hasDiscountOrCoupon: hasDiscount,
+      items: order.items || [],
+    });
+
+    const updated = orders.map((ord) => {
+      const cId = ord.orderId || ord.id;
+      if (cId === orderId) {
+        return {
+          ...ord,
+          status: 'ডেলিভারি সম্পন্ন (Delivered)',
+          delivered_at: nowIso,
+          mlm_processed: true,
+          mlm_release_due_at: deliveryResult.releaseDueAt,
+          mlm_cooling_hours: deliveryResult.coolingHours,
+        };
+      }
+      return ord;
+    });
+
+    setOrders(updated);
+    localStorage.setItem('flamingo_orders', JSON.stringify(updated));
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from('orders').update({
+          status: 'ডেলিভারি সম্পন্ন (Delivered)',
+          delivered_at: nowIso,
+          mlm_processed: true,
+        }).eq('id', orderId);
+      } catch (e) {}
+    }
+
+    const coolingDays = Math.round(deliveryResult.coolingHours / 24);
+    const coolingDesc = deliveryResult.coolingHours === 24
+      ? 'নো-রিটার্ন পণ্যের জন্য ২৪ ঘণ্টার সেফটি বাফার'
+      : `${coolingDays} দিনের রিটার্ন পলিসি কুলিং উইন্ডো`;
+
+    if (deliveryResult.mlmCalc.suppressed) {
+      alert(`অর্ডার ${orderId} ডেলিভারি সম্পন্ন হয়েছে!\n\n(নোট: ডিসকাউন্ট কুপন থাকায় ওভারল্যাপ নীতি অনুযায়ী এমএলএম কমিশন স্থগিত রাখা হয়েছে)`);
+    } else if (deliveryResult.commissions.length > 0) {
+      alert(`অর্ডার ${orderId} ডেলিভারি সফলভাবে কনফার্ম করা হয়েছে!\n\nডাইনামিক রেফারেল পলিসি: ${coolingDesc} সক্রিয় করা হয়েছে।`);
+    } else {
+      alert(`অর্ডার ${orderId} ডেলিভারি সফলভাবে কনফার্ম করা হয়েছে!`);
     }
   };
 
@@ -221,6 +344,12 @@ export default function AdminOrdersPage() {
         icon: <XCircle className="w-3.5 h-3.5 text-rose-600" />,
       };
     }
+    if (status.includes('Returned') || status.includes('রিটার্ন')) {
+      return {
+        bg: 'bg-orange-50 text-orange-700 border-orange-200',
+        icon: <RotateCcw className="w-3.5 h-3.5 text-orange-600" />,
+      };
+    }
     return {
       bg: 'bg-amber-50 text-amber-700 border-amber-200',
       icon: <AlertCircle className="w-3.5 h-3.5 text-amber-600" />,
@@ -262,19 +391,33 @@ export default function AdminOrdersPage() {
         {/* টপ হেডার ও নেভিগেশন */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-pink-100 gap-4">
           <div>
-            <div className="flex items-center gap-3 mb-2 text-xs font-semibold">
+            <div className="flex flex-wrap items-center gap-2.5 mb-2 text-xs font-semibold">
+              <Link 
+                href="/admin/settings?tab=theme" 
+                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+              >
+                <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
+              </Link>
+              <span className="text-gray-300">|</span>
               {currentAdmin.role === 'superadmin' ? (
                 <Link 
-                  href="/admin/settings" 
+                  href="/admin/settings?tab=business" 
                   className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
                 >
-                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
+                  <DollarSign className="w-3.5 h-3.5" /> বিজনেস মার্জিন
                 </Link>
               ) : (
                 <span className="text-gray-400 cursor-not-allowed flex items-center gap-1" title="শুধুমাত্র সুপারঅ্যাডমিন অ্যাক্সেস">
-                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস (লক)
+                  <DollarSign className="w-3.5 h-3.5" /> মার্জিন (লক)
                 </span>
               )}
+              <span className="text-gray-300">|</span>
+              <Link 
+                href="/admin/settings?tab=coupons" 
+                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+              >
+                <Tag className="w-3.5 h-3.5" /> কুপন ও মার্কেটিং
+              </Link>
               <span className="text-gray-300">|</span>
               <span className="text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md flex items-center gap-1">
                 <Package className="w-3.5 h-3.5" /> অর্ডার ম্যানেজমেন্ট
@@ -469,7 +612,24 @@ export default function AdminOrdersPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+                      {/* মডিউল ৩: Confirm Delivery বাটন */}
+                      {(!order.status?.includes('Delivered') && !order.status?.includes('সম্পন্ন')) ? (
+                        <button
+                          onClick={() => handleConfirmDelivery(order)}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95 flex items-center gap-1.5"
+                          title="ডেলিভারি সম্পন্ন করুন এবং ৭২ ঘণ্টার কমিশন রিলিজ সাইকেল চালু করুন"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Confirm Delivery / ডেলিভারি কনফার্ম</span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>ডেলিভারি কনফার্মড {order.delivered_at ? `(${new Date(order.delivered_at).toLocaleDateString('bn-BD')})` : ''}</span>
+                        </span>
+                      )}
+
                       {/* স্ট্যাটাস ড্রপডাউন */}
                       <div className="relative">
                         <select
@@ -495,6 +655,46 @@ export default function AdminOrdersPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* মডিউল ৩: ডাইনামিক রেফারেল কুলিং উইন্ডো নোটিশ বার */}
+                  {(order.status?.includes('Delivered') || order.status?.includes('সম্পন্ন') || order.delivered_at) && (
+                    <div className={`mt-3 p-3 rounded-2xl border flex flex-wrap items-center justify-between text-xs gap-2 ${
+                      (order.status?.includes('Cancelled') || order.status?.includes('বাতিল') || order.status?.includes('Returned') || order.status?.includes('রিটার্ন'))
+                        ? 'bg-rose-50 border-rose-200 text-rose-900'
+                        : 'bg-purple-50/70 border-purple-200 text-purple-900'
+                    }`}>
+                      {(order.status?.includes('Cancelled') || order.status?.includes('বাতিল') || order.status?.includes('Returned') || order.status?.includes('রিটার্ন')) ? (
+                        <div className="flex items-center gap-2 font-semibold">
+                          <XCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                          <span>পেন্ডিং কমিশন বাতিল (Commissions Voided due to Return/Cancellation):</span>
+                          <span className="text-[11px] text-rose-700 font-normal">
+                            অর্ডার বাতিল বা রিটার্ন হওয়ায় সমস্ত আপলাইন রেফারেল কমিশন সাথে সাথে বাতিল ও ওয়ালেট থেকে সমন্বয় করা হয়েছে।
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2 font-semibold">
+                            <Clock className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                            <span>
+                              {order.mlm_cooling_hours && order.mlm_cooling_hours > 24
+                                ? `${Math.round(order.mlm_cooling_hours / 24)} দিনের রিটার্ন পলিসি কুলিং উইন্ডো (Dynamic Return Cooling):`
+                                : '২৪ ঘণ্টার অ্যান্টি-ফ্রড সেফটি বাফার (Anti-Fraud Safety Buffer):'}
+                            </span>
+                            <span className="text-[11px] text-purple-700 font-normal">
+                              {order.mlm_cooling_hours && order.mlm_cooling_hours > 24
+                                ? 'গ্রাহক পণ্য রিটার্ন না করলে এই মেয়াদ শেষে আপলাইন কমিশন স্বয়ংক্রিয় ক্রেডিট হবে'
+                                : 'নো-রিটার্ন পণ্যের জন্য ২৪ ঘণ্টা পর কমিশন সরাসরি ওয়ালেটে যুক্ত হবে'}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[11px] font-mono font-bold bg-white px-2.5 py-1 rounded-lg border border-purple-200 text-purple-800 shadow-2xs">
+                              {order.mlm_release_due_at ? `রিলিজ: ${new Date(order.mlm_release_due_at).toLocaleDateString('bn-BD', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : 'কুলিং চলমান'}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {/* কার্ড বডি: কাস্টমার তথ্য ও আইটেম লিস্ট */}
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-5 text-xs">
@@ -562,8 +762,20 @@ export default function AdminOrdersPage() {
                                     পরিমাণ: <strong className="text-gray-800">{item.quantity} টি</strong> × ৳ {item.price}
                                   </p>
 
-                                  {/* আইটেম-স্পেসিফিক ওয়ারেন্টি ব্যাজ */}
-                                  <div className="mt-1">
+                                  {/* আইটেম-স্পেসিফিক রিটার্ন পলিসি ও ওয়ারেন্টি ব্যাজ */}
+                                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                    {(item.returnPolicyType === 'RETURNABLE' || item.return_policy_type === 'RETURNABLE') ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-medium">
+                                        <RotateCcw className="w-3 h-3 text-blue-600 flex-shrink-0" />
+                                        <span>রিটার্ন: {item.returnDays || item.return_days || 7} দিন</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 font-medium">
+                                        <AlertCircle className="w-3 h-3 text-amber-600 flex-shrink-0" />
+                                        <span>নো-রিটার্ন</span>
+                                      </span>
+                                    )}
+
                                     {hasWarranty ? (
                                       <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-medium border ${
                                         isExpired 
@@ -572,16 +784,17 @@ export default function AdminOrdersPage() {
                                       }`}>
                                         <ShieldCheck className="w-3 h-3 text-emerald-600 flex-shrink-0" />
                                         <span>
-                                          {isExpired 
-                                            ? `ওয়ারেন্টি শেষ হয়েছে (${expiryDate})` 
-                                            : `ওয়ারেন্টি মেয়াদ: ${expiryDate || `${item.warrantyDays} দিন`}`}
+                                          {item.warrantyText || item.warranty_text || (isExpired 
+                                            ? `ওয়ারেন্টি শেষ (${expiryDate})` 
+                                            : `ওয়ারেন্টি: ${expiryDate || `${item.warrantyDays} দিন`}`)}
                                         </span>
                                       </span>
-                                    ) : (
-                                      <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-md bg-gray-200 text-gray-600 font-medium">
-                                        নো ওয়ারেন্টি
+                                    ) : (item.warrantyText || item.warranty_text) ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
+                                        <ShieldCheck className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+                                        <span>{item.warrantyText || item.warranty_text}</span>
                                       </span>
-                                    )}
+                                    ) : null}
                                   </div>
                                 </div>
                               </div>
@@ -604,10 +817,29 @@ export default function AdminOrdersPage() {
                               <span>কুপন ({order.appliedCouponCode || order.coupon?.code}): -৳ {order.discountAmount || order.coupon?.discountAmount || 0}</span>
                             </span>
                           )}
-                          <span>ডেলিভারি চার্জ: ৳ {order.deliveryCharge || order.shippingCost || 0}</span>
+                          {order.walletUsedAmount > 0 && (
+                            <span className="inline-flex items-center gap-1 text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md font-semibold border border-purple-200">
+                              <span>ওয়ালেট ব্যালেন্স পরিশোধ: -৳ {order.walletUsedAmount}</span>
+                            </span>
+                          )}
+                          <span>ডেলিভারি ফি: ৳ {order.deliveryCharge || order.shippingCost || 0}</span>
+                          {order.advanceTrxId ? (
+                            <span className="font-mono text-[11px] font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded-md">
+                              {order.advancePaymentMethod || 'bKash/Nagad'}: {order.advanceTrxId} (অগ্রিম পেইড)
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                              পেমেন্ট: {order.paymentMethodName || order.payment_method || 'ক্যাশ অন ডেলিভারি (COD)'}
+                            </span>
+                          )}
                         </div>
-                        <div className="font-bold text-sm text-gray-900">
-                          সর্বমোট: <strong className="text-pink-600 font-mono text-base">৳ {order.grandTotal}</strong>
+                        <div className="text-right">
+                          <div className="font-bold text-sm text-gray-900">
+                            সর্বমোট: <strong className="text-pink-600 font-mono text-base">৳ {order.grandTotal}</strong>
+                          </div>
+                          <span className="text-[11px] text-gray-500 block">
+                            ডেলিভারির সময় প্রদেয়: <strong className="font-mono text-gray-900">৳ {order.dueOnDelivery ?? order.netPayableCod ?? Math.max(0, order.grandTotal - (order.walletUsedAmount || 0) - (order.advancePaidAmount || 0))}</strong>
+                          </span>
                         </div>
                       </div>
 

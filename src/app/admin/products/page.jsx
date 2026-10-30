@@ -24,15 +24,21 @@ import {
   Tag,
   AlertCircle,
   Users,
-  LogOut
+  LogOut,
+  Calculator,
+  Percent,
+  RotateCcw
 } from 'lucide-react';
+import { useSiteConfig } from '@/context/SiteConfigContext';
+import { calculateSellingPriceBreakdown } from '@/lib/pricingEngine';
 
-const CATEGORIES = ['All', 'Necklace', 'Ring', 'Bracelet', 'Earrings'];
+const CATEGORIES = ['All', 'Jewelry', 'Necklace', 'Ring', 'Bracelet', 'Earrings', 'Electronics', 'Lifestyle', 'Accessories', 'Home Decor', 'Other'];
 
 export default function AdminProductsPage() {
   const { currentAdmin, isAuthLoaded, logoutAdmin } = useAuth();
   const router = useRouter();
   const { products, addProduct, updateProduct, toggleStock, deleteProduct, resetToDefault } = useProducts();
+  const { config } = useSiteConfig();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -46,18 +52,22 @@ export default function AdminProductsPage() {
     }
   }, [isAuthLoaded, currentAdmin, router]);
 
-  // ফর্ম স্টেট
+  // ফর্ম স্টেট (মডিউল ১: costPrice সহ ডায়নামিক মার্জিন ও রিটার্ন পলিসি)
   const [formData, setFormData] = useState({
     name: '',
-    category: 'Ring',
+    category: 'Jewelry',
+    costPrice: '',
     price: '',
     originalPrice: '',
     image: '',
     additionalImages: '',
+    stock: 20,
     inStock: true,
-    hasWarranty: true,
-    warrantyDays: 180,
-    warrantyText: '৬ মাসের ফ্রি পলিশিং ওয়ারেন্টি',
+    returnPolicyType: 'NO_RETURN',
+    returnDays: 0,
+    hasWarranty: false,
+    warrantyDays: 0,
+    warrantyText: '',
     shortDescription: '',
     description: '',
   });
@@ -70,20 +80,38 @@ export default function AdminProductsPage() {
     return matchesSearch && matchesCat;
   });
 
+  // কস্ট প্রাইস টাইপ করলে স্বয়ংক্রিয় সেলিং প্রাইস (MRP) ও ব্রেকডাউন হিসাব
+  const handleCostPriceChange = (costInput) => {
+    const num = Number(costInput) || 0;
+    const breakdown = calculateSellingPriceBreakdown(num, config?.pricingSettings);
+    setFormData((prev) => ({
+      ...prev,
+      costPrice: costInput,
+      price: breakdown.sellingPrice ? String(breakdown.sellingPrice) : prev.price,
+    }));
+  };
+
+  // লাইভ ব্রেকডাউন
+  const liveBreakdown = calculateSellingPriceBreakdown(formData.costPrice, config?.pricingSettings);
+
   // মোডাল ওপেন (Add Mode)
   const handleOpenAddModal = () => {
     setEditingProduct(null);
     setFormData({
       name: '',
-      category: 'Ring',
+      category: 'Jewelry',
+      costPrice: '',
       price: '',
       originalPrice: '',
       image: '',
       additionalImages: '',
+      stock: 20,
       inStock: true,
-      hasWarranty: true,
-      warrantyDays: 180,
-      warrantyText: '৬ মাসের ফ্রি পলিশিং ওয়ারেন্টি',
+      returnPolicyType: 'NO_RETURN',
+      returnDays: 0,
+      hasWarranty: false,
+      warrantyDays: 0,
+      warrantyText: '',
       shortDescription: '',
       description: '',
     });
@@ -96,15 +124,19 @@ export default function AdminProductsPage() {
     const extraImages = (prod.images || []).filter((img) => img !== (prod.image || prod.images?.[0]));
     setFormData({
       name: prod.name || '',
-      category: prod.category || 'Ring',
+      category: prod.category || 'Jewelry',
+      costPrice: prod.costPrice || prod.cost_price || '',
       price: prod.price || '',
       originalPrice: prod.originalPrice || '',
       image: prod.image || prod.images?.[0] || '',
       additionalImages: extraImages.join('\n'),
+      stock: prod.stock ?? 20,
       inStock: prod.inStock ?? true,
-      hasWarranty: prod.hasWarranty ?? false,
+      returnPolicyType: prod.returnPolicyType || prod.return_policy_type || 'NO_RETURN',
+      returnDays: prod.returnDays ?? prod.return_days ?? 0,
+      hasWarranty: prod.hasWarranty ?? Boolean(prod.warrantyText || prod.warranty_text),
       warrantyDays: prod.warrantyDays || 0,
-      warrantyText: prod.warrantyText || '',
+      warrantyText: prod.warrantyText || prod.warranty_text || '',
       shortDescription: prod.shortDescription || '',
       description: prod.description || '',
     });
@@ -129,18 +161,24 @@ export default function AdminProductsPage() {
     const payload = {
       name: formData.name.trim(),
       category: formData.category,
+      costPrice: Number(formData.costPrice) || 0,
+      cost_price: Number(formData.costPrice) || 0,
       price: Number(formData.price),
       originalPrice: formData.originalPrice ? Number(formData.originalPrice) : null,
+      stock: Number(formData.stock) || (formData.inStock ? 20 : 0),
       image: mainImg,
       images: allImages,
       inStock: Boolean(formData.inStock),
-      hasWarranty: Boolean(formData.hasWarranty),
+      returnPolicyType: formData.returnPolicyType || 'NO_RETURN',
+      return_policy_type: formData.returnPolicyType || 'NO_RETURN',
+      returnDays: formData.returnPolicyType === 'RETURNABLE' ? (Number(formData.returnDays) || 7) : 0,
+      return_days: formData.returnPolicyType === 'RETURNABLE' ? (Number(formData.returnDays) || 7) : 0,
+      hasWarranty: Boolean(formData.hasWarranty || formData.warrantyText.trim()),
       warrantyDays: formData.hasWarranty ? Number(formData.warrantyDays) || 0 : 0,
-      warrantyText: formData.hasWarranty 
-        ? (formData.warrantyText.trim() || `${formData.warrantyDays} দিনের ওয়ারেন্টি`) 
-        : 'কোনো ওয়ারেন্টি নেই',
-      shortDescription: formData.shortDescription.trim() || 'প্রিমিয়াম ৯২৫ স্টার্লিং সিলভার জুয়েলারি।',
-      description: formData.description.trim() || 'আন্তর্জাতিক ৯২৫ হলমার্ক নিশ্চয়তা ও অ্যান্টি-টার্নিশ ফিনিশিং সংবলিত খাঁটি সিলভার জুয়েলারি।',
+      warrantyText: formData.warrantyText.trim(),
+      warranty_text: formData.warrantyText.trim(),
+      shortDescription: formData.shortDescription.trim() || 'আন্তর্জাতিক মানসম্মত ও শতভাগ যাচাইকৃত কোয়ালিটি পণ্য।',
+      description: formData.description.trim() || 'উচ্চমানের টেকসই কাঁচামাল, আধুনিক প্রযুক্তি ও নিখুঁত ফিনিশিং সংবলিত পণ্য।',
     };
 
     if (editingProduct) {
@@ -182,19 +220,33 @@ export default function AdminProductsPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-gray-200 gap-4">
           <div>
             {/* অ্যাডমিন লিংক বার */}
-            <div className="flex items-center gap-3 mb-2 text-xs font-semibold">
+            <div className="flex flex-wrap items-center gap-2.5 mb-2 text-xs font-semibold">
+              <Link 
+                href="/admin/settings?tab=theme" 
+                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+              >
+                <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
+              </Link>
+              <span className="text-gray-300">|</span>
               {currentAdmin.role === 'superadmin' ? (
                 <Link 
-                  href="/admin/settings" 
+                  href="/admin/settings?tab=business" 
                   className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
                 >
-                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
+                  <Percent className="w-3.5 h-3.5" /> বিজনেস মার্জিন
                 </Link>
               ) : (
                 <span className="text-gray-400 cursor-not-allowed flex items-center gap-1" title="শুধুমাত্র সুপারঅ্যাডমিন অ্যাক্সেস">
-                  <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস (লক)
+                  <Percent className="w-3.5 h-3.5" /> মার্জিন (লক)
                 </span>
               )}
+              <span className="text-gray-300">|</span>
+              <Link 
+                href="/admin/settings?tab=coupons" 
+                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
+              >
+                <Tag className="w-3.5 h-3.5" /> কুপন ও মার্কেটিং
+              </Link>
               <span className="text-gray-300">|</span>
               <Link 
                 href="/admin/orders" 
@@ -330,7 +382,7 @@ export default function AdminProductsPage() {
                     <th className="py-3.5 px-4">ক্যাটাগরি</th>
                     <th className="py-3.5 px-4">মূল্য (প্রদেয়)</th>
                     <th className="py-3.5 px-4">স্টক স্ট্যাটাস</th>
-                    <th className="py-3.5 px-4">ওয়ারেন্টি পলিসি</th>
+                    <th className="py-3.5 px-4">রিটার্ন ও ওয়ারেন্টি</th>
                     <th className="py-3.5 px-4 text-right">অ্যাকশন</th>
                   </tr>
                 </thead>
@@ -369,6 +421,7 @@ export default function AdminProductsPage() {
                       </td>
 
                       {/* মূল্য */}
+                      {/* মূল্য (প্রদেয়) ও বেস ক্রয় মূল্য */}
                       <td className="py-3 px-4">
                         <div className="font-mono">
                           <span className="font-bold text-gray-900 text-sm">৳ {prod.price}</span>
@@ -377,6 +430,11 @@ export default function AdminProductsPage() {
                               ৳ {prod.originalPrice}
                             </span>
                           )}
+                          {(prod.costPrice || prod.cost_price) ? (
+                            <span className="block text-[10px] text-gray-400 mt-0.5">
+                              ক্রয়: ৳{prod.costPrice || prod.cost_price}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
 
@@ -406,18 +464,30 @@ export default function AdminProductsPage() {
                         </button>
                       </td>
 
-                      {/* ওয়ারেন্টি পলিসি */}
+                      {/* রিটার্ন পলিসি ও ওয়ারেন্টি */}
                       <td className="py-3 px-4">
-                        {prod.hasWarranty ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 font-medium">
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                            <span>{prod.warrantyText || `${prod.warrantyDays} দিন`}</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center text-[11px] text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg">
-                            নো ওয়ারেন্টি
-                          </span>
-                        )}
+                        <div className="space-y-1">
+                          {(prod.returnPolicyType === 'RETURNABLE' || prod.return_policy_type === 'RETURNABLE') ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-medium">
+                              <RotateCcw className="w-3 h-3 text-blue-600 flex-shrink-0" />
+                              <span>রিটার্ন: {prod.returnDays || prod.return_days || 7} দিন</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 font-medium">
+                              <AlertCircle className="w-3 h-3 text-amber-600 flex-shrink-0" />
+                              <span>নো-রিটার্ন</span>
+                            </span>
+                          )}
+
+                          {(prod.warrantyText || prod.warranty_text) && (
+                            <div className="block">
+                              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-medium">
+                                <ShieldCheck className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+                                <span className="truncate max-w-[140px]">{prod.warrantyText || prod.warranty_text}</span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* অ্যাকশন বাটনসমূহ */}
@@ -486,45 +556,139 @@ export default function AdminProductsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">ক্যাটাগরি *</label>
+                  <label className="block font-semibold text-gray-700 mb-1">জেনেরিক ক্যাটাগরি (Category) *</label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-white"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-white"
                   >
+                    <option value="Jewelry">Jewelry (জুয়েলারি ও অলংকার)</option>
                     <option value="Ring">Ring (আংটি)</option>
                     <option value="Necklace">Necklace (লকেট ও চেইন)</option>
                     <option value="Bracelet">Bracelet (ব্রেসলেট)</option>
                     <option value="Earrings">Earrings (কানের দুল)</option>
+                    <option value="Electronics">Electronics (ইলেকট্রনিক্স ও গ্যাজেট)</option>
+                    <option value="Lifestyle">Lifestyle (লাইফস্টাইল ও ফ্যাশন)</option>
+                    <option value="Accessories">Accessories (অ্যাকসেসরিজ)</option>
+                    <option value="Home Decor">Home Decor (হোম অ্যান্ড লিভিং)</option>
+                    <option value="Other">Other (অন্যান্য ফিজিক্যাল প্রোডাক্ট)</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">বিক্রয় মূল্য (৳) *</label>
+                  <label className="block font-semibold text-gray-700 mb-1">স্টক পরিমাণ (Stock Quantity) *</label>
                   <input
                     type="number"
-                    required
-                    min="1"
-                    placeholder="যেমন: 1850"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                    min="0"
+                    placeholder="যেমন: 25"
+                    value={formData.stock}
+                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-white font-mono"
                   />
+                </div>
+              </div>
+
+              {/* মডিউল ১: ডায়নামিক প্রাইসিং ও মার্জিন ইঞ্জিন অটো-ক্যালকুলেশন */}
+              <div className="p-4 bg-gradient-to-br from-pink-50/70 to-purple-50/40 rounded-2xl border border-pink-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-pink-700 font-bold">
+                    <Calculator className="w-4 h-4 text-pink-600" />
+                    <span>ডায়নামিক প্রাইসিং ও মার্জিন ইঞ্জিন (Auto-Pricing Math)</span>
+                  </div>
+                  <span className="text-[10px] bg-white border border-pink-200 text-pink-700 px-2.5 py-0.5 rounded-full font-semibold">
+                    মার্জিন: {liveBreakdown.totalMarginPercentage.toFixed(1)}%
+                  </span>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">আগের মূল্য / কাটা মূল্য (৳)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="যেমন: 2200"
-                    value={formData.originalPrice}
-                    onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-white font-mono"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-gray-800 mb-1">
+                      বেস ক্রয় মূল্য (Cost Price ৳) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400">৳</span>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="যেমন: 1000"
+                        value={formData.costPrice}
+                        onChange={(e) => handleCostPriceChange(e.target.value)}
+                        className="w-full pl-7 pr-3 py-2 border border-pink-300 rounded-xl text-xs font-bold font-mono focus:outline-pink-500 bg-white"
+                      />
+                    </div>
+                    <span className="text-[10px] text-gray-500 mt-0.5 block">ওয়্যারহাউজ বেস পারচেজ রেট</span>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-gray-800 mb-1">
+                      বিক্রয় মূল্য / MRP (৳) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs font-bold text-pink-600">৳</span>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        className="w-full pl-7 pr-3 py-2 border border-pink-300 rounded-xl text-xs font-black font-mono text-pink-700 focus:outline-pink-500 bg-white"
+                      />
+                    </div>
+                    <span className="text-[10px] text-emerald-600 font-medium mt-0.5 block">স্বয়ংক্রিয় হিসাবকৃত</span>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-gray-700 mb-1">কাটা মূল্য / ডিসপ্লে অফার (৳)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400">৳</span>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="যেমন: 2200"
+                        value={formData.originalPrice}
+                        onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
+                        className="w-full pl-7 pr-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-white font-mono"
+                      />
+                    </div>
+                    <span className="text-[10px] text-gray-400 mt-0.5 block">ঐচ্ছিক স্ট্রিক-থ্রু মূল্য</span>
+                  </div>
                 </div>
+
+                {/* লাইভ ব্রেকডাউন টেবিল */}
+                {Number(formData.costPrice) > 0 && (
+                  <div className="mt-2 bg-white rounded-xl border border-pink-100 overflow-hidden shadow-xs">
+                    <div className="bg-pink-100/60 px-3 py-1.5 text-[11px] font-bold text-pink-900 flex justify-between items-center">
+                      <span>মার্জিন ফান্ড বিভাজন (Margin Allocation Breakdown)</span>
+                      <span className="font-mono">মোট মার্জিন: {liveBreakdown.totalMarginPercentage}%</span>
+                    </div>
+                    <table className="w-full text-[11px]">
+                      <tbody className="divide-y divide-gray-100">
+                        <tr className="bg-gray-50/50">
+                          <td className="px-3 py-1.5 text-gray-600">বেস ক্রয় মূল্য (Base Warehouse Cost)</td>
+                          <td className="px-3 py-1.5 font-mono font-bold text-gray-900 text-right">৳ {liveBreakdown.costPrice.toLocaleString()}</td>
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-1.5 text-gray-600">অপারেশনাল ফান্ড ({liveBreakdown.opexPercentage}% of MRP)</td>
+                          <td className="px-3 py-1.5 font-mono font-semibold text-indigo-700 text-right">+ ৳ {liveBreakdown.allocatedOpex.toLocaleString()}</td>
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-1.5 text-gray-600">গ্রোথ, মার্কেটিং ও রেফারেল ফান্ড ({liveBreakdown.growthPoolPercentage}% of MRP)</td>
+                          <td className="px-3 py-1.5 font-mono font-semibold text-purple-700 text-right">+ ৳ {liveBreakdown.allocatedGrowth.toLocaleString()}</td>
+                        </tr>
+                        <tr>
+                          <td className="px-3 py-1.5 text-gray-600">কোম্পানির নিট প্রফিট ({liveBreakdown.netProfitPercentage}% of MRP)</td>
+                          <td className="px-3 py-1.5 font-mono font-semibold text-emerald-700 text-right">+ ৳ {liveBreakdown.allocatedNetProfit.toLocaleString()}</td>
+                        </tr>
+                        <tr className="bg-pink-50/80 font-bold border-t border-pink-200">
+                          <td className="px-3 py-2 text-pink-900 font-bold">চূড়ান্ত বিক্রয় মূল্য (Final Selling Price / MRP)</td>
+                          <td className="px-3 py-2 font-mono font-black text-pink-700 text-right text-xs">৳ {liveBreakdown.sellingPrice.toLocaleString()}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* ইমেজ ইনপুট */}
@@ -556,73 +720,112 @@ export default function AdminProductsPage() {
                 </div>
               </div>
 
-              {/* স্টক ও ওয়ারেন্টি টগল */}
-              <div className="p-4 bg-pink-50/30 rounded-2xl border border-pink-100 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-gray-800">স্টক অবস্থা (Availability):</span>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.inStock}
-                      onChange={(e) => setFormData({ ...formData, inStock: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                    <span className="ml-2 text-xs font-semibold text-gray-700">
-                      {formData.inStock ? 'স্টকে আছে' : 'স্টক আউট'}
-                    </span>
+              {/* রিটার্ন পলিসি ও কুলিং উইন্ডো কনফিগারেশন */}
+              <div className="p-4 bg-blue-50/40 rounded-2xl border border-blue-200/70 space-y-3">
+                <div>
+                  <label className="block font-semibold text-gray-800 text-xs mb-1.5 flex items-center gap-1.5">
+                    <RotateCcw className="w-4 h-4 text-blue-600" />
+                    <span>রিটার্ন পলিসি টাইপ (Return Policy):</span>
                   </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, returnPolicyType: 'NO_RETURN', returnDays: 0 })}
+                      className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition ${
+                        formData.returnPolicyType === 'NO_RETURN'
+                          ? 'bg-amber-50 border-amber-300 text-amber-950 ring-2 ring-amber-400/30'
+                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        <span>NO_RETURN (নো-রিটার্ন)</span>
+                      </div>
+                      <span className="text-[11px] text-gray-500">
+                        চেক করে রিসিভ, পরবর্তীতে কোনো রিটার্ন প্রযোজ্য নয় (২৪ ঘণ্টা সেফটি বাফার)
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, returnPolicyType: 'RETURNABLE', returnDays: formData.returnDays || 7 })}
+                      className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition ${
+                        formData.returnPolicyType === 'RETURNABLE'
+                          ? 'bg-blue-50 border-blue-300 text-blue-950 ring-2 ring-blue-400/30'
+                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
+                        <span>RETURNABLE (রিটার্নযোগ্য)</span>
+                      </div>
+                      <span className="text-[11px] text-gray-500">
+                        গ্রাহক নির্দিষ্ট দিনের ভেতর রিটার্ন করতে পারবেন (কুরিয়ার চার্জ গ্রাহক বহন করবেন)
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="border-t border-pink-100/70 pt-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-gray-800 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" /> ওয়ারেন্টি প্রদান করবেন?
-                    </span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.hasWarranty}
-                        onChange={(e) => setFormData({ ...formData, hasWarranty: e.target.checked })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-pink-600"></div>
-                      <span className="ml-2 text-xs font-semibold text-gray-700">
-                        {formData.hasWarranty ? 'হ্যাঁ (সক্রিয়)' : 'না'}
-                      </span>
-                    </label>
-                  </div>
-
-                  {formData.hasWarranty && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                          ওয়ারেন্টি মেয়াদ (দিন সংখ্যা)
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          placeholder="যেমন: 180 বা 365"
-                          value={formData.warrantyDays}
-                          onChange={(e) => setFormData({ ...formData, warrantyDays: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-pink-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                          ওয়ারেন্টি বিবরণ টেক্সট
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="যেমন: ৬ মাসের ফ্রি পলিশিং ওয়ারেন্টি"
-                          value={formData.warrantyText}
-                          onChange={(e) => setFormData({ ...formData, warrantyText: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-pink-500"
-                        />
+                {formData.returnPolicyType === 'RETURNABLE' && (
+                  <div className="pt-2 border-t border-blue-100 flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1">
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                        রিটার্ন সময়সীমা (দিন সংখ্যা):
+                      </label>
+                      <select
+                        value={formData.returnDays || 7}
+                        onChange={(e) => setFormData({ ...formData, returnDays: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-blue-200 rounded-xl text-xs bg-white focus:outline-blue-500"
+                      >
+                        <option value={3}>৩ দিন (3 Days)</option>
+                        <option value={5}>৫ দিন (5 Days)</option>
+                        <option value={7}>৭ দিন (7 Days - Standard)</option>
+                        <option value={10}>১০ দিন (10 Days)</option>
+                        <option value={14}>১৪ দিন (14 Days)</option>
+                        <option value={30}>৩০ দিন (30 Days)</option>
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                        রেফারেল কমিশন রিলিজ সিঙ্ক:
+                      </label>
+                      <div className="p-2 bg-white rounded-xl border border-blue-100 text-[11px] text-blue-900">
+                        ডেলিভারির <strong>{formData.returnDays || 7} দিন</strong> পর আপলাইন কমিশন ওয়ালেটে ক্রেডিট হবে
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-blue-100">
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>ওয়ারেন্টি টেক্সট (Warranty Text - ঐচ্ছিক):</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: 7 Days Replacement বা ৬ মাসের ফ্রি পলিশিং ওয়ারেন্টি"
+                    value={formData.warrantyText}
+                    onChange={(e) => setFormData({ ...formData, warrantyText: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:outline-pink-500"
+                  />
                 </div>
+              </div>
+
+              {/* স্টক অবস্থা */}
+              <div className="p-4 bg-pink-50/30 rounded-2xl border border-pink-100 flex items-center justify-between">
+                <span className="font-semibold text-gray-800 text-xs">স্টক প্রাপ্যতা (Stock Availability):</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.inStock}
+                    onChange={(e) => setFormData({ ...formData, inStock: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  <span className="ml-2 text-xs font-semibold text-gray-700">
+                    {formData.inStock ? 'স্টকে আছে (In Stock)' : 'স্টক আউট (Out of Stock)'}
+                  </span>
+                </label>
               </div>
 
               <div>

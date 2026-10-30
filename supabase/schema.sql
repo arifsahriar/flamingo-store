@@ -58,8 +58,15 @@ create table if not exists public.coupons (
   discount_amount numeric not null default 0,
   discount_type text default 'flat', -- 'flat' | 'percentage'
   min_spend numeric default 0,
+  min_order_value numeric default 0,
   is_exclusive boolean default false,
+  target_audience text default 'GLOBAL', -- 'GLOBAL' | 'INDIVIDUAL'
   assigned_user_id text,
+  assigned_customer_phone text,
+  assigned_customer_email text,
+  assigned_customer_name text,
+  usage_limit_per_user integer default 1,
+  used_count integer default 0,
   expiry_date timestamp with time zone,
   is_active boolean default true,
   created_at timestamp with time zone default timezone('utc'::text, now())
@@ -174,3 +181,131 @@ insert into public.products (
   '{"material": "925 Sterling Silver", "plating": "Rhodium Plated", "stone": "Sparkling CZ Crystal", "type": "Drop Earrings"}'::jsonb
 )
 on conflict (id) do nothing;
+
+-- =================================================================
+-- MODULES 1 TO 4: DYNAMIC PRICING, MLM DOWNLINE & WALLET LEDGER
+-- =================================================================
+
+-- 1. Pricing Settings Singleton Table
+create table if not exists public.pricing_settings (
+  id text primary key default 'default',
+  opex_percentage numeric not null default 8.5,
+  growth_pool_percentage numeric not null default 12.0,
+  net_profit_percentage numeric not null default 10.0,
+  advance_delivery_inside_city numeric not null default 80,
+  advance_delivery_outside_city numeric not null default 150,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+insert into public.pricing_settings (
+  id, opex_percentage, growth_pool_percentage, net_profit_percentage,
+  advance_delivery_inside_city, advance_delivery_outside_city
+) values ('default', 8.5, 12.0, 10.0, 80, 150)
+on conflict (id) do update set
+  opex_percentage = excluded.opex_percentage,
+  growth_pool_percentage = excluded.growth_pool_percentage,
+  net_profit_percentage = excluded.net_profit_percentage,
+  advance_delivery_inside_city = excluded.advance_delivery_inside_city,
+  advance_delivery_outside_city = excluded.advance_delivery_outside_city;
+
+-- Alter Products table for Base Cost Price, Dynamic Return Policy & Warranty
+alter table public.products add column if not exists cost_price numeric default 0;
+alter table public.products add column if not exists return_policy_type text not null default 'NO_RETURN' check (return_policy_type in ('NO_RETURN', 'RETURNABLE'));
+alter table public.products add column if not exists return_days integer not null default 0;
+alter table public.products add column if not exists warranty_text text;
+
+-- 2. Profiles and N-Tier MLM Downline Chains
+create table if not exists public.profiles (
+  id text primary key,
+  name text not null,
+  phone text not null unique,
+  email text,
+  password_hash text,
+  referrer_id text references public.profiles(id) on delete set null,
+  referral_code text unique,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+create table if not exists public.mlm_chains (
+  id bigserial primary key,
+  user_id text not null references public.profiles(id) on delete cascade,
+  upline_id text not null references public.profiles(id) on delete cascade,
+  tier_level integer not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  unique(user_id, upline_id)
+);
+
+-- Alter Orders Table for 72h Cooling Cycle & Advance Security Tracking
+alter table public.orders add column if not exists delivered_at timestamp with time zone;
+alter table public.orders add column if not exists wallet_used_amount numeric default 0;
+alter table public.orders add column if not exists advance_paid_amount numeric default 0;
+alter table public.orders add column if not exists advance_trx_id text;
+alter table public.orders add column if not exists advance_payment_method text default 'bKash';
+alter table public.orders add column if not exists mlm_processed boolean default false;
+alter table public.orders add column if not exists mlm_note text;
+alter table public.orders add column if not exists payment_method text default 'COD';
+alter table public.orders add column if not exists payment_status text default 'unpaid';
+alter table public.orders add column if not exists order_status text default 'pending';
+
+-- 3. Customer Wallets & Ledger
+create table if not exists public.customer_wallets (
+  id text primary key default ('wlt_' || substr(md5(random()::text), 1, 10)),
+  user_id text not null unique references public.profiles(id) on delete cascade,
+  available_balance numeric not null default 0 check (available_balance >= 0),
+  pending_balance numeric not null default 0 check (pending_balance >= 0),
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+create table if not exists public.wallet_transactions (
+  id text primary key default ('tx_' || substr(md5(random()::text), 1, 12)),
+  user_id text not null references public.profiles(id) on delete cascade,
+  amount numeric not null,
+  transaction_type text not null check (transaction_type in ('CREDIT_REFERRAL', 'DEBIT_PURCHASE', 'CASHBACK', 'VOID_RETURN')),
+  reference_order_id text,
+  description text,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+create table if not exists public.referral_commissions (
+  id text primary key default ('comm_' || substr(md5(random()::text), 1, 12)),
+  order_id text not null references public.orders(id) on delete cascade,
+  order_item_total numeric not null default 0,
+  buyer_user_id text not null,
+  upline_user_id text not null references public.profiles(id) on delete cascade,
+  tier_level integer not null,
+  commission_percentage numeric not null,
+  commission_amount numeric not null,
+  status text not null default 'pending_release' check (status in ('pending_release', 'credited', 'voided')),
+  delivered_at timestamp with time zone not null,
+  cooling_hours integer not null default 24,
+  release_due_at timestamp with time zone not null,
+  credited_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- RLS for new tables
+alter table public.pricing_settings enable row level security;
+alter table public.profiles enable row level security;
+alter table public.mlm_chains enable row level security;
+alter table public.customer_wallets enable row level security;
+alter table public.wallet_transactions enable row level security;
+alter table public.referral_commissions enable row level security;
+
+create policy "Allow public read on pricing_settings" on public.pricing_settings for select using (true);
+create policy "Allow public write on pricing_settings" on public.pricing_settings for all using (true);
+
+create policy "Allow public read on profiles" on public.profiles for select using (true);
+create policy "Allow public write on profiles" on public.profiles for all using (true);
+
+create policy "Allow public read on mlm_chains" on public.mlm_chains for select using (true);
+create policy "Allow public write on mlm_chains" on public.mlm_chains for all using (true);
+
+create policy "Allow public read on customer_wallets" on public.customer_wallets for select using (true);
+create policy "Allow public write on customer_wallets" on public.customer_wallets for all using (true);
+
+create policy "Allow public read on wallet_transactions" on public.wallet_transactions for select using (true);
+create policy "Allow public write on wallet_transactions" on public.wallet_transactions for all using (true);
+
+create policy "Allow public read on referral_commissions" on public.referral_commissions for select using (true);
+create policy "Allow public write on referral_commissions" on public.referral_commissions for all using (true);

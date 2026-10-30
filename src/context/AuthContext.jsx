@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { registerUplineChain } from '@/lib/mlmEngine';
+import { getCustomerWallet } from '@/lib/walletService';
 
 const DEFAULT_STAFF_USERS = [
   {
@@ -122,7 +124,13 @@ export function AuthProvider({ children }) {
       
       const cleanPhone = phone.trim();
       const cleanEmail = email ? email.trim().toLowerCase() : '';
-      const cleanReferredBy = referredByCode ? referredByCode.trim().toUpperCase() : null;
+      
+      // রেফারেল কোড প্যারামিটার অথবা পূর্বে সেভ করা গেটওয়ে রেফারেল
+      let cleanReferredBy = referredByCode ? referredByCode.trim().toUpperCase() : null;
+      if (!cleanReferredBy && typeof window !== 'undefined') {
+        const storedActiveRef = localStorage.getItem('flamingo_active_referral');
+        if (storedActiveRef) cleanReferredBy = storedActiveRef.trim().toUpperCase();
+      }
 
       // ফোন বা ইমেইল দিয়ে ডুপ্লিকেট চেক
       const exists = users.some(
@@ -137,6 +145,30 @@ export function AuthProvider({ children }) {
       const referralCode = generateReferralCode();
       const newId = 'usr_' + Date.now();
 
+      // আপলাইন চেইন তৈরি ও রেফারার আইডি নির্ধারণ
+      let directReferrerId = null;
+      if (cleanReferredBy) {
+        try {
+          const chain = await registerUplineChain({ newUserId: newId, referrerCode: cleanReferredBy });
+          if (chain && chain.length > 0) {
+            directReferrerId = chain[0].userId;
+          }
+        } catch (chainErr) {
+          console.warn('Upline chain registration warning:', chainErr);
+        }
+      }
+
+      // ইনিশিয়াল ওয়ালেট রেকর্ড তৈরি
+      try {
+        const localWallets = JSON.parse(localStorage.getItem('flamingo_customer_wallets') || '{}');
+        if (!localWallets[newId]) {
+          localWallets[newId] = { user_id: newId, available_balance: 0, pending_balance: 0 };
+          localStorage.setItem('flamingo_customer_wallets', JSON.stringify(localWallets));
+        }
+      } catch (wErr) {
+        console.warn('Local wallet init warning:', wErr);
+      }
+
       const newUser = {
         id: newId,
         name: name.trim(),
@@ -145,6 +177,7 @@ export function AuthProvider({ children }) {
         password: password,
         referralCode,
         referredByCode: cleanReferredBy,
+        referrerId: directReferrerId,
         vouchers: [],
         createdAt: new Date().toLocaleDateString('bn-BD', {
           year: 'numeric',
@@ -164,6 +197,7 @@ export function AuthProvider({ children }) {
         email: newUser.email,
         referralCode: newUser.referralCode,
         referredByCode: newUser.referredByCode,
+        referrerId: directReferrerId,
         vouchers: [],
         createdAt: newUser.createdAt,
       };
@@ -171,7 +205,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem('flamingo_current_user', JSON.stringify(safeUser));
       setCurrentUser(safeUser);
 
-      // সুপাবেজ ডাটাবেজে ব্যাকগ্রাউন্ডে সেভ
+      // সুপাবেজ ডাটাবেজে ব্যাকগ্রাউন্ডে সেভ (customers + profiles + customer_wallets)
       if (isSupabaseConfigured()) {
         try {
           await supabase.from('customers').insert([
@@ -185,6 +219,30 @@ export function AuthProvider({ children }) {
               created_at: new Date().toISOString(),
             },
           ]);
+
+          // profiles টেবিল
+          await supabase.from('profiles').insert([
+            {
+              id: newId,
+              name: newUser.name,
+              phone: cleanPhone,
+              email: cleanEmail || null,
+              password_hash: password,
+              referrer_id: directReferrerId,
+              referral_code: referralCode,
+              created_at: new Date().toISOString(),
+            },
+          ]).catch(() => {});
+
+          // customer_wallets
+          await supabase.from('customer_wallets').insert([
+            {
+              user_id: newId,
+              available_balance: 0,
+              pending_balance: 0,
+              created_at: new Date().toISOString(),
+            },
+          ]).catch(() => {});
         } catch (dbErr) {
           console.warn('Supabase customer insert offline fallback:', dbErr);
         }
