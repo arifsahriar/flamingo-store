@@ -27,7 +27,12 @@ import {
   LogOut,
   Calculator,
   Percent,
-  RotateCcw
+  RotateCcw,
+  Video,
+  ArrowUp,
+  ArrowDown,
+  Film,
+  Play
 } from 'lucide-react';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { calculateSellingPriceBreakdown } from '@/lib/pricingEngine';
@@ -52,7 +57,7 @@ export default function AdminProductsPage() {
     }
   }, [isAuthLoaded, currentAdmin, router]);
 
-  // ফর্ম স্টেট (মডিউল ১: costPrice সহ ডায়নামিক মার্জিন ও রিটার্ন পলিসি)
+  // ফর্ম স্টেট (মডিউল ১: costPrice সহ ডায়নামিক মার্জিন ও রিটার্ন পলিসি, মাল্টিমিডিয়া গ্যালারি)
   const [formData, setFormData] = useState({
     name: '',
     category: 'Jewelry',
@@ -61,6 +66,7 @@ export default function AdminProductsPage() {
     originalPrice: '',
     image: '',
     additionalImages: '',
+    media_gallery: [],
     stock: 20,
     inStock: true,
     returnPolicyType: 'NO_RETURN',
@@ -70,6 +76,13 @@ export default function AdminProductsPage() {
     warrantyText: '',
     shortDescription: '',
     description: '',
+  });
+
+  // নতুন মিডিয়া আইটেম ইনপুট স্টেট (ছবি / ভিডিও রিল)
+  const [mediaInput, setMediaInput] = useState({
+    type: 'IMAGE',
+    url: '',
+    thumbnail_url: '',
   });
 
   // ফিল্টার ও সার্চ লজিক
@@ -94,6 +107,77 @@ export default function AdminProductsPage() {
   // লাইভ ব্রেকডাউন
   const liveBreakdown = calculateSellingPriceBreakdown(formData.costPrice, config?.pricingSettings);
 
+  // মিডিয়া আইটেম যোগ
+  const handleAddMediaItem = () => {
+    if (!mediaInput.url.trim()) return;
+
+    const newItem = {
+      id: `media-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      type: mediaInput.type === 'VIDEO' ? 'VIDEO' : 'IMAGE',
+      url: mediaInput.url.trim(),
+      thumbnail_url: mediaInput.thumbnail_url.trim() || (mediaInput.type === 'IMAGE' ? mediaInput.url.trim() : ''),
+      display_order: formData.media_gallery.length,
+    };
+
+    const updatedGallery = [...formData.media_gallery, newItem];
+    setFormData((prev) => {
+      const firstImg = updatedGallery.find((m) => m.type === 'IMAGE')?.url || updatedGallery[0]?.url || '';
+      const otherImgs = updatedGallery.filter((m) => m.type === 'IMAGE' && m.url !== firstImg).map((m) => m.url);
+      return {
+        ...prev,
+        media_gallery: updatedGallery,
+        image: prev.image || firstImg,
+        additionalImages: otherImgs.join('\n'),
+      };
+    });
+
+    setMediaInput({
+      type: 'IMAGE',
+      url: '',
+      thumbnail_url: '',
+    });
+  };
+
+  // মিডিয়া আইটেম রিমুভ
+  const handleRemoveMediaItem = (index) => {
+    const updated = formData.media_gallery.filter((_, idx) => idx !== index).map((item, idx) => ({
+      ...item,
+      display_order: idx,
+    }));
+    setFormData((prev) => {
+      const firstImg = updated.find((m) => m.type === 'IMAGE')?.url || updated[0]?.url || '';
+      return {
+        ...prev,
+        media_gallery: updated,
+        image: firstImg,
+      };
+    });
+  };
+
+  // মিডিয়া আইটেম রি-অর্ডার (Up / Down)
+  const handleMoveMediaItem = (index, direction) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= formData.media_gallery.length) return;
+
+    const list = [...formData.media_gallery];
+    const [moved] = list.splice(index, 1);
+    list.splice(targetIndex, 0, moved);
+
+    const reordered = list.map((item, idx) => ({
+      ...item,
+      display_order: idx,
+    }));
+
+    setFormData((prev) => {
+      const firstImg = reordered.find((m) => m.type === 'IMAGE')?.url || reordered[0]?.url || '';
+      return {
+        ...prev,
+        media_gallery: reordered,
+        image: firstImg,
+      };
+    });
+  };
+
   // মোডাল ওপেন (Add Mode)
   const handleOpenAddModal = () => {
     setEditingProduct(null);
@@ -105,6 +189,7 @@ export default function AdminProductsPage() {
       originalPrice: '',
       image: '',
       additionalImages: '',
+      media_gallery: [],
       stock: 20,
       inStock: true,
       returnPolicyType: 'NO_RETURN',
@@ -115,21 +200,40 @@ export default function AdminProductsPage() {
       shortDescription: '',
       description: '',
     });
+    setMediaInput({ type: 'IMAGE', url: '', thumbnail_url: '' });
     setIsModalOpen(true);
   };
 
   // মোডাল ওপেন (Edit Mode)
   const handleOpenEditModal = (prod) => {
     setEditingProduct(prod);
+
+    // Initial media_gallery fallback
+    let gallery = [];
+    if (Array.isArray(prod.media_gallery) && prod.media_gallery.length > 0) {
+      gallery = prod.media_gallery.slice().sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+    } else {
+      const imgs = Array.isArray(prod.images) && prod.images.length > 0 ? prod.images : [prod.image].filter(Boolean);
+      gallery = imgs.map((url, idx) => ({
+        id: `mg-legacy-${idx}`,
+        type: 'IMAGE',
+        url,
+        thumbnail_url: url,
+        display_order: idx,
+      }));
+    }
+
     const extraImages = (prod.images || []).filter((img) => img !== (prod.image || prod.images?.[0]));
+
     setFormData({
       name: prod.name || '',
       category: prod.category || 'Jewelry',
       costPrice: prod.costPrice || prod.cost_price || '',
       price: prod.price || '',
       originalPrice: prod.originalPrice || '',
-      image: prod.image || prod.images?.[0] || '',
+      image: prod.image || prod.images?.[0] || gallery[0]?.url || '',
       additionalImages: extraImages.join('\n'),
+      media_gallery: gallery,
       stock: prod.stock ?? 20,
       inStock: prod.inStock ?? true,
       returnPolicyType: prod.returnPolicyType || prod.return_policy_type || 'NO_RETURN',
@@ -140,6 +244,7 @@ export default function AdminProductsPage() {
       shortDescription: prod.shortDescription || '',
       description: prod.description || '',
     });
+    setMediaInput({ type: 'IMAGE', url: '', thumbnail_url: '' });
     setIsModalOpen(true);
   };
 
@@ -151,12 +256,30 @@ export default function AdminProductsPage() {
       return;
     }
 
+    // Prepare media_gallery and fallback images
+    let finalGallery = formData.media_gallery && formData.media_gallery.length > 0
+      ? formData.media_gallery.slice().sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+      : [];
+
     const mainImg = formData.image.trim() || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop';
     const extras = formData.additionalImages
       .split(/[\n,]/)
       .map((s) => s.trim())
       .filter(Boolean);
     const allImages = [mainImg, ...extras.filter((url) => url !== mainImg)];
+
+    if (finalGallery.length === 0) {
+      finalGallery = allImages.map((url, idx) => ({
+        id: `mg-gen-${idx}`,
+        type: 'IMAGE',
+        url,
+        thumbnail_url: url,
+        display_order: idx,
+      }));
+    }
+
+    const primaryImg = finalGallery.find((m) => m.type === 'IMAGE')?.url || finalGallery[0]?.url || mainImg;
+    const galleryImageUrls = finalGallery.filter((m) => m.type === 'IMAGE').map((m) => m.url);
 
     const payload = {
       name: formData.name.trim(),
@@ -166,8 +289,9 @@ export default function AdminProductsPage() {
       price: Number(formData.price),
       originalPrice: formData.originalPrice ? Number(formData.originalPrice) : null,
       stock: Number(formData.stock) || (formData.inStock ? 20 : 0),
-      image: mainImg,
-      images: allImages,
+      media_gallery: finalGallery,
+      image: primaryImg,
+      images: galleryImageUrls.length > 0 ? galleryImageUrls : [primaryImg],
       inStock: Boolean(formData.inStock),
       returnPolicyType: formData.returnPolicyType || 'NO_RETURN',
       return_policy_type: formData.returnPolicyType || 'NO_RETURN',
@@ -409,6 +533,14 @@ export default function AdminProductsPage() {
                             <p className="text-[11px] text-gray-400 truncate max-w-xs mt-0.5">
                               {prod.shortDescription}
                             </p>
+                            {prod.media_gallery && prod.media_gallery.length > 0 && (
+                              <span className="inline-flex items-center gap-1 text-[9px] text-pink-700 bg-pink-50 border border-pink-100 px-1.5 py-0.5 rounded-md mt-1 font-bold">
+                                {prod.media_gallery.some((m) => m.type === 'VIDEO') && (
+                                  <Film className="w-2.5 h-2.5 text-purple-600 flex-shrink-0" />
+                                )}
+                                <span>{prod.media_gallery.length} টি মিডিয়া</span>
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -691,30 +823,184 @@ export default function AdminProductsPage() {
                 )}
               </div>
 
-              {/* ইমেজ ইনপুট */}
-              <div className="space-y-3 p-3.5 bg-gray-50/60 rounded-2xl border border-gray-100">
+              {/* মাল্টি-মিডিয়া গ্যালারি ও ভিডিও রিলস কনফিগারেশন */}
+              <div className="space-y-3.5 p-4 bg-gradient-to-br from-pink-50/50 via-white to-pink-50/30 rounded-2xl border border-pink-200/80 shadow-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-pink-100">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-4 h-4 text-pink-600" />
+                    <span className="font-bold text-gray-900 text-xs">
+                      মাল্টি-মিডিয়া গ্যালারি ও ভিডিও রিল (Media Gallery & Reels)
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">
+                    {formData.media_gallery.length} টি আইটেম
+                  </span>
+                </div>
+
+                {/* বর্তমান মিডিয়া আইটেম তালিকা (রি-অর্ডারিং সহ) */}
+                {formData.media_gallery.length > 0 && (
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {formData.media_gallery.map((item, idx) => (
+                      <div
+                        key={item.id || idx}
+                        className="flex items-center justify-between p-2 bg-white rounded-xl border border-gray-200 hover:border-pink-300 shadow-2xs gap-2 transition"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {/* প্রিভিউ থাম্বনেইল */}
+                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-900 flex-shrink-0 relative border border-gray-100">
+                            {item.type === 'VIDEO' ? (
+                              <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 text-pink-400">
+                                <Play className="w-4 h-4 fill-current" />
+                              </div>
+                            ) : (
+                              <img
+                                src={item.url}
+                                alt="preview"
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                            <span className="absolute bottom-0 inset-x-0 bg-black/60 text-[8px] text-white text-center font-bold">
+                              #{idx + 1}
+                            </span>
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                  item.type === 'VIDEO'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'bg-emerald-100 text-emerald-700'
+                                }`}
+                              >
+                                {item.type === 'VIDEO' ? '🎥 ভিডিও রিল' : '📷 ছবি'}
+                              </span>
+                              {idx === 0 && (
+                                <span className="text-[9px] font-bold bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded">
+                                  প্রধান থাম্বনেইল
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-gray-500 truncate max-w-xs font-mono mt-0.5">
+                              {item.url}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* রি-অর্ডার ও ডিলিট বাটন */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => handleMoveMediaItem(idx, -1)}
+                            className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 hover:bg-gray-100 rounded transition"
+                            title="উপরে নিন"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === formData.media_gallery.length - 1}
+                            onClick={() => handleMoveMediaItem(idx, 1)}
+                            className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 hover:bg-gray-100 rounded transition"
+                            title="নিচে নিন"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMediaItem(idx)}
+                            className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition"
+                            title="মুছে ফেলুন"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* নতুন মিডিয়া আইটেম যোগ ফর্ম */}
+                <div className="bg-white p-3 rounded-xl border border-pink-200/60 space-y-2.5">
+                  <span className="text-[11px] font-bold text-gray-800 block">
+                    + নতুন ছবি বা ভিডিও রিল যোগ করুন:
+                  </span>
+
+                  {/* টাইপ সিলেকশন */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMediaInput((prev) => ({ ...prev, type: 'IMAGE' }))}
+                      className={`flex-1 py-1.5 px-3 rounded-lg text-[11px] font-bold border transition flex items-center justify-center gap-1.5 ${
+                        mediaInput.type === 'IMAGE'
+                          ? 'bg-pink-50 border-pink-400 text-pink-700 shadow-2xs'
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>📷 প্রোডাক্ট ইমেজ (Image)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMediaInput((prev) => ({ ...prev, type: 'VIDEO' }))}
+                      className={`flex-1 py-1.5 px-3 rounded-lg text-[11px] font-bold border transition flex items-center justify-center gap-1.5 ${
+                        mediaInput.type === 'VIDEO'
+                          ? 'bg-purple-50 border-purple-400 text-purple-700 shadow-2xs'
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      <span>🎥 ভিডিও রিল (MP4/WebM)</span>
+                    </button>
+                  </div>
+
+                  {/* URL ইনপুটস */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <input
+                        type="text"
+                        placeholder={
+                          mediaInput.type === 'VIDEO'
+                            ? 'ভিডিও URL (https://... .mp4)'
+                            : 'ইমেজ URL (https://... .jpg)'
+                        }
+                        value={mediaInput.url}
+                        onChange={(e) => setMediaInput((prev) => ({ ...prev, url: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-gray-50/50"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="থাম্বনেইল URL (ঐচ্ছিক)"
+                        value={mediaInput.thumbnail_url}
+                        onChange={(e) => setMediaInput((prev) => ({ ...prev, thumbnail_url: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-gray-50/50"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddMediaItem}
+                    disabled={!mediaInput.url.trim()}
+                    className="w-full py-2 bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-xl text-xs font-bold shadow-xs hover:from-pink-700 hover:to-rose-700 active:scale-95 disabled:opacity-40 transition flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> গ্যালারিতে যুক্ত করুন
+                  </button>
+                </div>
+
+                {/* কুইক ফলব্যাক প্রধান ইমেজ লিংক */}
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
-                    <ImageIcon className="w-3.5 h-3.5 text-pink-600" /> প্রধান ইমেজ URL (Main Image Link)
+                  <label className="block font-semibold text-gray-600 text-[11px] mb-1">
+                    কুইক প্রধান ইমেজ লিংক (Quick Default Image URL):
                   </label>
                   <input
                     type="text"
                     placeholder="https://images.unsplash.com/..."
                     value={formData.image}
                     onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    অতিরিক্ত ইমেজ লিংকসমূহ (প্রতি লাইনে একটি লিংক দিন)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="https://...&#10;https://..."
-                    value={formData.additionalImages}
-                    onChange={(e) => setFormData({ ...formData, additionalImages: e.target.value })}
                     className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-white"
                   />
                 </div>

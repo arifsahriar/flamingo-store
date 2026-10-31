@@ -5,6 +5,30 @@ export const PRODUCTS = [
     category: 'Necklace',
     price: 1850,
     originalPrice: 2200,
+    costPrice: 950,
+    media_gallery: [
+      {
+        id: 'sp-m1',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=300&auto=format&fit=crop',
+        display_order: 0,
+      },
+      {
+        id: 'sp-m2',
+        type: 'VIDEO',
+        url: 'https://assets.mixkit.co/videos/preview/mixkit-close-up-of-a-woman-wearing-a-silver-necklace-42526-large.mp4',
+        thumbnail_url: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=300&auto=format&fit=crop',
+        display_order: 1,
+      },
+      {
+        id: 'sp-m3',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=300&auto=format&fit=crop',
+        display_order: 2,
+      },
+    ],
     images: [
       'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop',
       'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=800&auto=format&fit=crop',
@@ -24,8 +48,8 @@ export const PRODUCTS = [
       material: '925 Sterling Silver',
       plating: 'Rhodium Plated',
       stone: 'AAA+ Cubic Zirconia',
-      chainLength: '40cm + 5cm adjustable'
-    }
+      chainLength: '40cm + 5cm adjustable',
+    },
   },
   {
     id: 'emerald-silver-ring',
@@ -33,8 +57,33 @@ export const PRODUCTS = [
     category: 'Ring',
     price: 2100,
     originalPrice: 2500,
+    costPrice: 1100,
+    media_gallery: [
+      {
+        id: 'er-m1',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?q=80&w=300&auto=format&fit=crop',
+        display_order: 0,
+      },
+      {
+        id: 'er-m2',
+        type: 'VIDEO',
+        url: 'https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-woman-wearing-rings-42528-large.mp4',
+        thumbnail_url: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?q=80&w=300&auto=format&fit=crop',
+        display_order: 1,
+      },
+      {
+        id: 'er-m3',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1603561591411-07134e71a2a9?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1603561591411-07134e71a2a9?q=80&w=300&auto=format&fit=crop',
+        display_order: 2,
+      },
+    ],
     images: [
       'https://images.unsplash.com/photo-1605100804763-247f67b3557e?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1603561591411-07134e71a2a9?q=80&w=800&auto=format&fit=crop',
     ],
     image: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?q=80&w=800&auto=format&fit=crop',
     purity: '৯২৫ স্টার্লিং সিলভার',
@@ -51,8 +100,8 @@ export const PRODUCTS = [
       material: '925 Sterling Silver',
       plating: 'Platinum Polish',
       stone: 'Synthetic Emerald & CZ',
-      size: 'Adjustable / Free Size'
-    }
+      size: 'Adjustable / Free Size',
+    },
   },
   {
     id: 'minimal-silver-cuff',
@@ -60,6 +109,23 @@ export const PRODUCTS = [
     category: 'Bracelet',
     price: 1950,
     originalPrice: 2300,
+    costPrice: 1000,
+    media_gallery: [
+      {
+        id: 'sc-m1',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1611591475155-4286fa7c2e7f?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1611591475155-4286fa7c2e7f?q=80&w=300&auto=format&fit=crop',
+        display_order: 0,
+      },
+      {
+        id: 'sc-m2',
+        type: 'VIDEO',
+        url: 'https://assets.mixkit.co/videos/preview/mixkit-a-woman-wearing-a-silver-bracelet-42529-large.mp4',
+        thumbnail_url: 'https://images.unsplash.com/photo-1611591475155-4286fa7c2e7f?q=80&w=300&auto=format&fit=crop',
+        display_order: 1,
+      },
+    ],
     images: [
       'https://images.unsplash.com/photo-1611591475155-4286fa7c2e7f?q=80&w=800&auto=format&fit=crop',
     ],
@@ -78,8 +144,8 @@ export const PRODUCTS = [
       material: '925 Sterling Silver',
       plating: 'Rhodium Plated',
       stone: 'None',
-      diameter: '60mm (Flexible)'
-    }
+      diameter: '60mm (Flexible)',
+    },
   },
   {
     id: 'crystal-drop-earrings',
@@ -87,6 +153,30 @@ export const PRODUCTS = [
     category: 'Earrings',
     price: 1650,
     originalPrice: 1950,
+    costPrice: 850,
+    media_gallery: [
+      {
+        id: 'ce-m1',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?q=80&w=300&auto=format&fit=crop',
+        display_order: 0,
+      },
+      {
+        id: 'ce-m2',
+        type: 'VIDEO',
+        url: 'https://assets.mixkit.co/videos/preview/mixkit-close-up-of-a-woman-with-silver-earrings-42527-large.mp4',
+        thumbnail_url: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?q=80&w=300&auto=format&fit=crop',
+        display_order: 1,
+      },
+      {
+        id: 'ce-m3',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?q=80&w=300&auto=format&fit=crop',
+        display_order: 2,
+      },
+    ],
     images: [
       'https://images.unsplash.com/photo-1630019852942-f89202989a59?q=80&w=800&auto=format&fit=crop',
       'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?q=80&w=800&auto=format&fit=crop',
@@ -106,7 +196,111 @@ export const PRODUCTS = [
       material: '925 Sterling Silver',
       plating: 'Rhodium Plated',
       stone: 'Sparkling CZ Crystal',
-      type: 'Drop Earrings'
-    }
-  }
+      type: 'Drop Earrings',
+    },
+  },
+  {
+    id: 'embroidered-silk-attire',
+    name: 'Artisan Embroidered Silk Tunic',
+    category: 'Clothing',
+    price: 3450,
+    originalPrice: 4200,
+    costPrice: 1800,
+    media_gallery: [
+      {
+        id: 'ea-m1',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=300&auto=format&fit=crop',
+        display_order: 0,
+      },
+      {
+        id: 'ea-m2',
+        type: 'VIDEO',
+        url: 'https://assets.mixkit.co/videos/preview/mixkit-fabric-of-a-traditional-indian-dress-41553-large.mp4',
+        thumbnail_url: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=300&auto=format&fit=crop',
+        display_order: 1,
+      },
+      {
+        id: 'ea-m3',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?q=80&w=300&auto=format&fit=crop',
+        display_order: 2,
+      },
+    ],
+    images: [
+      'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?q=80&w=800&auto=format&fit=crop',
+    ],
+    image: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=800&auto=format&fit=crop',
+    purity: '১০০% পিওর কটন-সিল্ক ব্যালেন্স',
+    coating: 'হাতে বোনা সুতা ও খাঁটি জরি এমব্রয়ডারি',
+    inStock: true,
+    hasWarranty: true,
+    warrantyDays: 30,
+    warrantyText: 'কালার গ্যারান্টি ও ফেব্রিক কোয়ালিটি নিশ্চয়তা',
+    returnPolicyType: 'RETURNABLE',
+    returnDays: 7,
+    shortDescription: 'অভিজাত কারুকাজের হাতে বোনা জরি ও নিখুঁত থ্রেডওয়ার্ক এমব্রয়ডারি কুর্তি।',
+    description: 'উচ্চমানের লাক্সারি সিল্ক ফেব্রিকে তৈরি, যা সংবেদনশীল ত্বকে এনে দেয় পরম প্রশান্তি। উৎসব, পার্টি বা সামাজিক অনুষ্ঠানে অনন্য ব্যক্তিত্বর প্রকাশ ঘটায়।',
+    specs: {
+      material: 'Pure Handloom Silk Blend',
+      work: 'Intricate Zari & Sequin Embroidery',
+      fit: 'Comfort Regular Fit',
+      care: 'Dry Clean Recommended',
+    },
+  },
+  {
+    id: 'floral-jamdani-weave',
+    name: 'Handcrafted Floral Jamdani Weave',
+    category: 'Clothing',
+    price: 4950,
+    originalPrice: 5900,
+    costPrice: 2600,
+    media_gallery: [
+      {
+        id: 'fj-m1',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?q=80&w=300&auto=format&fit=crop',
+        display_order: 0,
+      },
+      {
+        id: 'fj-m2',
+        type: 'VIDEO',
+        url: 'https://assets.mixkit.co/videos/preview/mixkit-close-up-of-clothing-fabric-moving-48611-large.mp4',
+        thumbnail_url: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?q=80&w=300&auto=format&fit=crop',
+        display_order: 1,
+      },
+      {
+        id: 'fj-m3',
+        type: 'IMAGE',
+        url: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?q=80&w=800&auto=format&fit=crop',
+        thumbnail_url: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?q=80&w=300&auto=format&fit=crop',
+        display_order: 2,
+      },
+    ],
+    images: [
+      'https://images.unsplash.com/photo-1610030469983-98e550d6193c?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1584917865442-de89df76afd3?q=80&w=800&auto=format&fit=crop',
+    ],
+    image: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?q=80&w=800&auto=format&fit=crop',
+    purity: 'ঐতিহ্যবাহী তাঁত ও সুতি জামদানি',
+    coating: 'প্রাকৃতিক সুতা ও টেকসই উইভিং',
+    inStock: true,
+    hasWarranty: false,
+    warrantyDays: 0,
+    warrantyText: '',
+    returnPolicyType: 'RETURNABLE',
+    returnDays: 7,
+    shortDescription: 'সূক্ষ্ম নকশাদার বুনন ও ঐতিহ্যবাহী কারুকাজের লাক্সারি জামদানি পরিধেয়।',
+    description: 'বাংলার শতবর্ষের ঐতিহ্যে গড়া প্রিমিয়াম জামদানি বুনন। প্রতিটি সুতায় জড়িয়ে আছে কারিগরদের ভালোবাসা ও নিপুণ হাতের ছোঁয়া।',
+    specs: {
+      material: '100% Cotton-Silk Weave',
+      count: '84 Count Fine Weave',
+      craft: 'Traditional Wooden Handloom',
+      origin: 'Dhaka Heritage Weave',
+    },
+  },
 ];
