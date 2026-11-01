@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Volume2, VolumeX, Play } from 'lucide-react';
 
-const DEFAULT_IMAGE_DURATION = 3500; // 3.5 seconds per image
-const MAX_VIDEO_PREVIEW_DURATION = 6500; // 6.5s preview loop or full video
+const DEFAULT_IMAGE_DURATION = 3500; // 3.5 seconds per slide
 
 export default function ProductMediaCarousel({
   product,
@@ -12,64 +11,61 @@ export default function ProductMediaCarousel({
   aspectRatio = 'aspect-square',
   className = '',
   autoPlay = true,
+  interval = DEFAULT_IMAGE_DURATION,
   showStoryBars = true,
   showControls = true,
   enableSoundToggle = true,
   onSlideChange,
 }) {
-  // 1. Normalize media items
+  // 1. Fail-Safe Media Array Fallback & Normalization
   const mediaList = React.useMemo(() => {
     let items = [];
     if (Array.isArray(media) && media.length > 0) {
       items = media;
-    } else if (product?.media_gallery && Array.isArray(product.media_gallery) && product.media_gallery.length > 0) {
+    } else if (product?.media_gallery && product.media_gallery.length > 0) {
       items = product.media_gallery;
-    } else if (product?.images && Array.isArray(product.images) && product.images.length > 0) {
-      items = product.images.map((url, idx) => ({
-        id: `img-${idx}`,
-        type: 'IMAGE',
-        url,
-        thumbnail_url: url,
-        display_order: idx,
-      }));
-    } else if (product?.image) {
-      items = [
-        {
-          id: 'single-img',
-          type: 'IMAGE',
-          url: product.image,
-          thumbnail_url: product.image,
-          display_order: 0,
-        },
-      ];
+    } else if (product?.images && product.images.length > 0) {
+      items = product.images;
+    } else if (product?.image_url || product?.image) {
+      items = [product.image_url || product.image];
     } else {
       items = [
-        {
-          id: 'placeholder',
-          type: 'IMAGE',
-          url: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop',
-          thumbnail_url: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop',
-          display_order: 0,
-        },
+        'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=800&auto=format&fit=crop',
       ];
     }
 
     return items
-      .slice()
+      .filter(Boolean)
+      .map((item, idx) => {
+        if (typeof item === 'string') {
+          const isVid = /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(item);
+          return {
+            id: `media-${idx}`,
+            type: isVid ? 'VIDEO' : 'IMAGE',
+            url: item,
+            thumbnail_url: item,
+            display_order: idx,
+          };
+        }
+        return {
+          id: item.id || `media-${idx}`,
+          type:
+            item.type ||
+            (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(item.url || '') ? 'VIDEO' : 'IMAGE'),
+          url: item.url || item.thumbnail_url || '',
+          thumbnail_url: item.thumbnail_url || item.url || '',
+          display_order: item.display_order ?? idx,
+        };
+      })
       .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
   }, [media, product]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [progress, setProgress] = useState(0); // 0 to 100 for current slide
-  const [isPaused, setIsPaused] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const [videoDuration, setVideoDuration] = useState(MAX_VIDEO_PREVIEW_DURATION);
 
   const videoRef = useRef(null);
-  const timerRef = useRef(null);
-  const progressIntervalRef = useRef(null);
-  const startTimeRef = useRef(0);
-  const elapsedBeforePauseRef = useRef(0);
+  const touchStartXRef = useRef(0);
+  const touchDeltaXRef = useRef(0);
 
   const currentItem = mediaList[currentIndex] || mediaList[0];
   const isVideo = currentItem?.type === 'VIDEO';
@@ -78,9 +74,10 @@ export default function ProductMediaCarousel({
   // Slide navigation
   const goToNext = useCallback(
     (e) => {
-      if (e) e.stopPropagation();
-      setProgress(0);
-      elapsedBeforePauseRef.current = 0;
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       setCurrentIndex((prev) => (prev + 1) % mediaList.length);
     },
     [mediaList.length]
@@ -88,119 +85,68 @@ export default function ProductMediaCarousel({
 
   const goToPrev = useCallback(
     (e) => {
-      if (e) e.stopPropagation();
-      setProgress(0);
-      elapsedBeforePauseRef.current = 0;
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       setCurrentIndex((prev) => (prev - 1 + mediaList.length) % mediaList.length);
     },
     [mediaList.length]
   );
 
-  // Notify parent on change
+  // Notify parent on slide change
   useEffect(() => {
     if (onSlideChange) {
       onSlideChange(currentIndex, currentItem);
     }
   }, [currentIndex, currentItem, onSlideChange]);
 
-  // Handle Video Metadata & Playback
+  // 1. Reliable, Standalone Auto-Advance Timer (pure setInterval)
+  useEffect(() => {
+    if (!autoPlay || mediaList.length <= 1) return;
+
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % mediaList.length);
+    }, interval || DEFAULT_IMAGE_DURATION);
+
+    return () => clearInterval(timer);
+  }, [autoPlay, mediaList.length, interval, currentIndex]);
+
+  // 3. Mobile Video Policy Fix (Prevent Freezing)
   useEffect(() => {
     if (isVideo && videoRef.current) {
       const vid = videoRef.current;
+      vid.defaultMuted = true;
+      vid.muted = isMuted;
+      vid.playsInline = true;
       vid.currentTime = 0;
-
-      const handleLoadedMetadata = () => {
-        const dur = vid.duration ? vid.duration * 1000 : MAX_VIDEO_PREVIEW_DURATION;
-        // Cap preview duration at max or full clip if shorter
-        setVideoDuration(Math.min(dur, MAX_VIDEO_PREVIEW_DURATION));
-      };
-
-      const handleEnded = () => {
-        if (!isPaused && autoPlay) {
-          goToNext();
-        }
-      };
-
-      vid.addEventListener('loadedmetadata', handleLoadedMetadata);
-      vid.addEventListener('ended', handleEnded);
-
-      if (!isPaused) {
-        vid.play().catch(() => {
-          // Auto-play was prevented (often due to non-muted)
-          vid.muted = true;
-          vid.play().catch(() => {});
-        });
-      } else {
-        vid.pause();
-      }
-
-      return () => {
-        vid.removeEventListener('loadedmetadata', handleLoadedMetadata);
-        vid.removeEventListener('ended', handleEnded);
-      };
+      vid.play().catch(() => {
+        /* Ignore autoplay restrictions */
+      });
     }
-  }, [currentIndex, isVideo, isPaused, autoPlay, goToNext]);
+  }, [currentIndex, isVideo, isMuted]);
 
-  // Auto-slide Timer & Progress Tracker
-  useEffect(() => {
-    if (!autoPlay || !hasMultiple) {
-      setProgress(0);
-      return;
-    }
-
-    if (isPaused) {
-      // While paused, freeze progress
-      if (videoRef.current && isVideo) {
-        videoRef.current.pause();
-      }
-      return;
-    }
-
-    if (videoRef.current && isVideo) {
-      videoRef.current.play().catch(() => {});
-    }
-
-    const duration = isVideo ? videoDuration : DEFAULT_IMAGE_DURATION;
-    startTimeRef.current = Date.now() - elapsedBeforePauseRef.current;
-
-    const tickInterval = 40; // 25fps progress updates for smoothness
-    progressIntervalRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTimeRef.current;
-      const pct = Math.min(100, (elapsed / duration) * 100);
-      setProgress(pct);
-
-      if (elapsed >= duration) {
-        clearInterval(progressIntervalRef.current);
-        goToNext();
-      }
-    }, tickInterval);
-
-    return () => {
-      clearInterval(progressIntervalRef.current);
-    };
-  }, [currentIndex, isPaused, autoPlay, hasMultiple, isVideo, videoDuration, goToNext]);
-
-  // Pause interactions
-  const handleMouseEnter = () => {
-    if (startTimeRef.current > 0) {
-      elapsedBeforePauseRef.current = Date.now() - startTimeRef.current;
-    }
-    setIsPaused(true);
+  // Touch Swipe gestures for mobile
+  const handleTouchStart = (e) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchDeltaXRef.current = 0;
   };
 
-  const handleMouseLeave = () => {
-    setIsPaused(false);
-  };
-
-  const handleTouchStart = () => {
-    if (startTimeRef.current > 0) {
-      elapsedBeforePauseRef.current = Date.now() - startTimeRef.current;
-    }
-    setIsPaused(true);
+  const handleTouchMove = (e) => {
+    if (!touchStartXRef.current) return;
+    touchDeltaXRef.current = e.touches[0].clientX - touchStartXRef.current;
   };
 
   const handleTouchEnd = () => {
-    setIsPaused(false);
+    if (hasMultiple && Math.abs(touchDeltaXRef.current) >= 40) {
+      if (touchDeltaXRef.current < 0) {
+        goToNext();
+      } else {
+        goToPrev();
+      }
+    }
+    touchStartXRef.current = 0;
+    touchDeltaXRef.current = 0;
   };
 
   const toggleSound = (e) => {
@@ -217,27 +163,36 @@ export default function ProductMediaCarousel({
 
   return (
     <div
-      className={`relative overflow-hidden group select-none ${aspectRatio} ${className}`}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      className={`relative overflow-hidden group select-none touch-pan-y ${aspectRatio} ${className}`}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
     >
-      {/* 1. Media Slide Rendering */}
+      {/* CSS Animation Keyframes for Story Fill */}
+      <style>
+        {`
+          @keyframes storyFill {
+            0% { width: 0%; }
+            100% { width: 100%; }
+          }
+        `}
+      </style>
+
+      {/* 2. Media Slide Rendering (Image or Video) */}
       {isVideo ? (
         <div className="w-full h-full relative bg-black">
           <video
             ref={videoRef}
             src={currentItem.url}
             poster={currentItem.thumbnail_url}
+            autoPlay
             muted={isMuted}
             playsInline
-            autoPlay
             preload="metadata"
+            onEnded={() => setCurrentIndex((prev) => (prev + 1) % mediaList.length)}
             className="w-full h-full object-cover transition-opacity duration-300"
           />
-          {/* Subtle Video Reel Indicator Badge */}
+          {/* Video Reel Indicator Badge */}
           <div className="absolute top-4 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 z-10 pointer-events-none">
             <Play className="w-2.5 h-2.5 fill-current text-pink-400" />
             <span>ভিডিও রিল</span>
@@ -252,18 +207,12 @@ export default function ProductMediaCarousel({
         />
       )}
 
-      {/* 2. Story-Style Top Progress Bars */}
+      {/* 2. Story-Style Top Progress Indicators (Smooth Fill according to currentIndex) */}
       {showStoryBars && hasMultiple && (
         <div className="absolute top-2.5 inset-x-2.5 z-20 flex gap-1.5 px-0.5 pointer-events-none">
           {mediaList.map((item, idx) => {
-            let fillPct = 0;
-            if (idx < currentIndex) {
-              fillPct = 100;
-            } else if (idx === currentIndex) {
-              fillPct = progress;
-            } else {
-              fillPct = 0;
-            }
+            const isCompleted = idx < currentIndex;
+            const isActive = idx === currentIndex;
 
             return (
               <div
@@ -271,8 +220,19 @@ export default function ProductMediaCarousel({
                 className="h-1 flex-1 bg-black/30 backdrop-blur-xs rounded-full overflow-hidden shadow-xs"
               >
                 <div
-                  className="h-full bg-white/95 rounded-full transition-all duration-75 ease-linear"
-                  style={{ width: `${fillPct}%` }}
+                  key={`${idx}-${currentIndex}`}
+                  className={`h-full bg-white/95 rounded-full ${
+                    isCompleted
+                      ? 'w-full'
+                      : isActive
+                      ? 'w-0'
+                      : 'w-0'
+                  }`}
+                  style={
+                    isActive
+                      ? { animation: `storyFill ${interval || DEFAULT_IMAGE_DURATION}ms linear forwards` }
+                      : undefined
+                  }
                 />
               </div>
             );
@@ -280,7 +240,25 @@ export default function ProductMediaCarousel({
         </div>
       )}
 
-      {/* 3. Navigation Arrows (Desktop hover) */}
+      {/* 4. Tap to Advance (Instant Mobile Interaction: Left Half -> Prev, Right Half -> Next) */}
+      {hasMultiple && (
+        <div className="absolute inset-0 z-10 flex">
+          {/* Left half: Tap to Previous */}
+          <div
+            className="w-1/2 h-full cursor-pointer"
+            onClick={goToPrev}
+            aria-label="Previous slide"
+          />
+          {/* Right half: Tap to Next */}
+          <div
+            className="w-1/2 h-full cursor-pointer"
+            onClick={goToNext}
+            aria-label="Next slide"
+          />
+        </div>
+      )}
+
+      {/* Navigation Arrows (Desktop hover) */}
       {showControls && hasMultiple && (
         <div className="hidden sm:block">
           <button
@@ -302,28 +280,7 @@ export default function ProductMediaCarousel({
         </div>
       )}
 
-      {/* 4. Tap Zones for Mobile Navigation */}
-      {hasMultiple && (
-        <div className="sm:hidden absolute inset-0 z-10 flex pointer-events-auto">
-          <div
-            className="w-1/3 h-full cursor-pointer"
-            onClick={(e) => {
-              e.stopPropagation();
-              goToPrev();
-            }}
-          />
-          <div className="w-1/3 h-full pointer-events-none" />
-          <div
-            className="w-1/3 h-full cursor-pointer"
-            onClick={(e) => {
-              e.stopPropagation();
-              goToNext();
-            }}
-          />
-        </div>
-      )}
-
-      {/* 5. Sound Toggle (When Video is Active) */}
+      {/* Sound Toggle (When Video is Active) */}
       {isVideo && enableSoundToggle && (
         <button
           type="button"
@@ -335,7 +292,7 @@ export default function ProductMediaCarousel({
         </button>
       )}
 
-      {/* 6. Media Counter Pill */}
+      {/* Media Counter Pill */}
       {hasMultiple && (
         <div className="absolute bottom-2.5 left-2.5 z-10 px-2 py-0.5 rounded-md bg-black/50 backdrop-blur-sm text-white text-[10px] font-medium font-mono pointer-events-none opacity-0 group-hover:opacity-100 transition duration-200">
           {currentIndex + 1} / {mediaList.length}
