@@ -724,6 +724,78 @@ function AdminSettingsContent() {
               </div>
             </div>
 
+            {/* AI ভার্চুয়াল ড্রেসিং রুম (Virtual Try-On / VTON) সেটিংস */}
+            <div className="bg-white p-6 rounded-3xl border border-purple-200/80 shadow-sm space-y-5 bg-gradient-to-br from-purple-50/30 via-white to-pink-50/30">
+              <div className="flex items-center justify-between border-b pb-3 border-purple-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                    <Sparkles className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold text-gray-800 flex items-center gap-2">
+                      AI ভার্চুয়াল ড্রেসিং রুম (AI Virtual Try-On)
+                    </h2>
+                    <p className="text-xs text-gray-500">
+                      গ্রাহকদের জন্য এআই ভিত্তিক পোশাক ট্রাই-অন ফিচার নিয়ন্ত্রণ করুন
+                    </p>
+                  </div>
+                </div>
+                <span className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                  form.enable_virtual_tryon 
+                    ? 'bg-purple-100 text-purple-700 border-purple-300' 
+                    : 'bg-gray-100 text-gray-600 border-gray-200'
+                }`}>
+                  {form.enable_virtual_tryon ? 'সক্রিয় (Active)' : 'নিষ্ক্রিয় (Disabled)'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-1">
+                {/* টগল সুইচ */}
+                <div className="flex items-start justify-between p-4 rounded-2xl bg-white border border-gray-200">
+                  <div className="space-y-1 pr-4">
+                    <label className="text-sm font-bold text-gray-800 block">
+                      ভার্চুয়াল ট্রাই-অন ফিচার চালু রাখুন (Feature Flag)
+                    </label>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      অন থাকলে প্রোডাক্ট পেজ ও সোয়াইপ মোডে &ldquo;✨ ভার্চুয়াল ড্রেসিং রুম&rdquo; বাটনটি দৃশ্যমান হবে। অফ থাকলে সাধারণ ভিজিটরদের কাছে এটি সম্পূর্ণ লুকানো থাকবে।
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-1">
+                    <input
+                      type="checkbox"
+                      name="enable_virtual_tryon"
+                      checked={Boolean(form.enable_virtual_tryon)}
+                      onChange={(e) => setForm((prev) => ({ ...prev, enable_virtual_tryon: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+
+                {/* দৈনিক লিমিট */}
+                <div className="p-4 rounded-2xl bg-white border border-gray-200 space-y-2">
+                  <label className="text-sm font-bold text-gray-800 block">
+                    প্রতি কাস্টমারের দৈনিক ট্রাই-অন লিমিট (Daily Limit)
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    এআই এপিআই খরচ নিয়ন্ত্রণে প্রতি কাস্টমার দিনে সর্বোচ্চ কতবার ট্রাই করতে পারবেন।
+                  </p>
+                  <div className="relative pt-1">
+                    <input
+                      type="number"
+                      name="vton_daily_limit"
+                      min="1"
+                      max="50"
+                      value={form.vton_daily_limit ?? 3}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2.5 border rounded-xl text-sm font-bold text-gray-900 focus:outline-purple-500 font-mono"
+                    />
+                    <span className="absolute right-3.5 top-3.5 text-xs font-bold text-gray-400">বার / দিন</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* সেভ বাটন */}
             <div className="flex justify-end pt-2">
               <button

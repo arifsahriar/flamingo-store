@@ -50,6 +50,12 @@ export function AuthProvider({ children }) {
       const savedUser = localStorage.getItem('flamingo_current_user');
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
+        const today = new Date().toISOString().slice(0, 10);
+        if (parsed.last_tryon_date !== today) {
+          parsed.daily_tryon_used = 0;
+          parsed.last_tryon_date = today;
+          localStorage.setItem('flamingo_current_user', JSON.stringify(parsed));
+        }
         if (!parsed.referralCode) {
           parsed.referralCode = generateReferralCode();
           localStorage.setItem('flamingo_current_user', JSON.stringify(parsed));
@@ -89,6 +95,12 @@ export function AuthProvider({ children }) {
               referralCode: cust.referral_code || existing?.referralCode || generateReferralCode(),
               referredByCode: existing?.referredByCode || null,
               vouchers: existing?.vouchers || [],
+              user_photo_url: cust.user_photo_url || existing?.user_photo_url || '',
+              height_cm: cust.height_cm || existing?.height_cm || '',
+              weight_kg: cust.weight_kg || existing?.weight_kg || '',
+              gender: cust.gender || existing?.gender || 'female',
+              daily_tryon_used: typeof cust.daily_tryon_used === 'number' ? cust.daily_tryon_used : (existing?.daily_tryon_used || 0),
+              last_tryon_date: cust.last_tryon_date || existing?.last_tryon_date || '',
               createdAt: cust.created_at ? new Date(cust.created_at).toLocaleDateString('bn-BD') : (existing?.createdAt || new Date().toLocaleDateString('bn-BD')),
             });
           });
@@ -611,6 +623,47 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // কাস্টমার প্রোফাইল আপডেট (ভার্চুয়াল ট্রাই-অন ফটো, উচ্চতা, ওজন ইত্যাদি)
+  const updateUserProfile = async (updates) => {
+    if (!currentUser) return;
+    const updated = { ...currentUser, ...updates };
+    setCurrentUser(updated);
+    try {
+      localStorage.setItem('flamingo_current_user', JSON.stringify(updated));
+      const users = JSON.parse(localStorage.getItem('flamingo_users') || '[]');
+      const updatedUsers = users.map((u) => (u.id === currentUser.id ? { ...u, ...updates } : u));
+      localStorage.setItem('flamingo_users', JSON.stringify(updatedUsers));
+
+      if (isSupabaseConfigured()) {
+        const payload = {
+          user_photo_url: updated.user_photo_url ?? null,
+          height_cm: updated.height_cm ? Number(updated.height_cm) : null,
+          weight_kg: updated.weight_kg ? Number(updated.weight_kg) : null,
+          gender: updated.gender ?? null,
+          daily_tryon_used: updated.daily_tryon_used ?? 0,
+          last_tryon_date: updated.last_tryon_date ?? null,
+        };
+        await supabase.from('profiles').update(payload).eq('id', currentUser.id);
+        await supabase.from('customers').update(payload).eq('id', currentUser.id);
+      }
+    } catch (err) {
+      console.warn('Error updating user profile:', err);
+    }
+    return updated;
+  };
+
+  // দৈনিক ট্রাই-অন ব্যবহার কাউন্টার বৃদ্ধি
+  const recordTryOnUsage = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const currentUsed = currentUser?.last_tryon_date === today ? (currentUser?.daily_tryon_used || 0) : 0;
+    const nextUsed = currentUsed + 1;
+    await updateUserProfile({
+      daily_tryon_used: nextUsed,
+      last_tryon_date: today,
+    });
+    return nextUsed;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -626,6 +679,8 @@ export function AuthProvider({ children }) {
         issueVoucherToCustomer,
         markVoucherUsed,
         refreshCurrentUser,
+        updateUserProfile,
+        recordTryOnUsage,
       }}
     >
       {children}

@@ -2,19 +2,21 @@
 
 import React, { useState } from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
-import { Heart, X, ChevronUp, ShieldCheck, ShoppingBag } from 'lucide-react';
+import { Heart, X, ChevronUp, ShieldCheck, ShoppingBag, Sparkles } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import ProductMediaCarousel from '@/components/ProductMediaCarousel';
+import VirtualTryOnModal from '@/components/VirtualTryOnModal';
 
 export default function SwipeCard({ product, onSwipeLeft, onSwipeRight, onDirectAddToCart }) {
   const [showDetails, setShowDetails] = useState(false);
+  const [isTryOnOpen, setIsTryOnOpen] = useState(false);
   const { addToCart } = useCart();
-  const { isFavorite, toggleFavorite, addToFavorites } = useFavorites();
+  const { addToFavorites } = useFavorites();
   const { config } = useSiteConfig();
 
-  const favorited = isFavorite(product?.id);
+
   
   // ড্র্যাগিং মোশন ভ্যালু
   const x = useMotionValue(0);
@@ -66,6 +68,22 @@ export default function SwipeCard({ product, onSwipeLeft, onSwipeRight, onDirect
             className="w-full h-full"
           />
         </div>
+
+        {/* ✨ ভার্চুয়াল ড্রেসিং রুম বাটন (ফিচার ফ্ল্যাগ সক্রিয় থাকলে) */}
+        {config?.enable_virtual_tryon && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsTryOnOpen(true);
+            }}
+            className="absolute top-4 right-4 z-20 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg border border-white/20 active:scale-90 transition pointer-events-auto"
+            title="ভার্চুয়াল ড্রেসিং রুম"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+            <span>✨ ট্রাই অন</span>
+          </button>
+        )}
 
         {/* ড্র্যাগিং ভিজ্যুয়াল ব্যাজ: পছন্দ হয়েছে! ❤️ (ডানে ড্র্যাগ) */}
         <motion.div
@@ -216,6 +234,20 @@ export default function SwipeCard({ product, onSwipeLeft, onSwipeRight, onDirect
         </div>
 
         <div className="space-y-2 pt-3 border-t border-gray-100">
+          {config?.enable_virtual_tryon && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowDetails(false);
+                setIsTryOnOpen(true);
+              }}
+              className="w-full py-2.5 mb-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+              <span>✨ ভার্চুয়াল ড্রেসিং রুম (Try On)</span>
+            </button>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => {
@@ -246,6 +278,14 @@ export default function SwipeCard({ product, onSwipeLeft, onSwipeRight, onDirect
         </div>
       </motion.div>
 
+      {/* Virtual Try-On Modal */}
+      <VirtualTryOnModal
+        isOpen={isTryOnOpen}
+        onClose={() => setIsTryOnOpen(false)}
+        product={product}
+        onAddToCart={handleAddToCartDirect}
+        onDirectBuy={handleAddToCartDirect}
+      />
     </div>
   );
 }

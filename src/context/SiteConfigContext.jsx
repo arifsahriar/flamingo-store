@@ -34,6 +34,10 @@ const DEFAULT_CONFIG = {
     { code: 'FLAMINGO10', type: 'percentage', discount: 10, note: '১০% ওয়েলকাম ডিসকাউন্ট' },
     { code: 'REFER50', type: 'flat', discount: 50, note: 'রেফারেল ৫০ টাকা ছাড়' },
   ],
+
+  // AI Virtual Dressing Room (Try-On) সেটিংস
+  enable_virtual_tryon: false,
+  vton_daily_limit: 3,
 };
 
 const SiteConfigContext = createContext();
@@ -54,6 +58,8 @@ export function SiteConfigProvider({ children }) {
           deliveryChargeOutsideDhaka: parsed.deliveryChargeOutsideDhaka ?? cachedPricing.advance_delivery_outside_city ?? DEFAULT_CONFIG.deliveryChargeOutsideDhaka,
           pricingSettings: parsed.pricingSettings ? { ...DEFAULT_PRICING_SETTINGS, ...parsed.pricingSettings } : cachedPricing,
           coupons: Array.isArray(parsed.coupons) ? parsed.coupons : DEFAULT_CONFIG.coupons,
+          enable_virtual_tryon: Boolean(parsed.enable_virtual_tryon),
+          vton_daily_limit: typeof parsed.vton_daily_limit === 'number' ? parsed.vton_daily_limit : 3,
         });
       } else {
         setConfig((prev) => ({

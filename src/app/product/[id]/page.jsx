@@ -1,10 +1,11 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import ProductMediaCarousel from '@/components/ProductMediaCarousel';
+import VirtualTryOnModal from '@/components/VirtualTryOnModal';
 import { useProducts } from '@/context/ProductsContext';
 import { useCart } from '@/context/CartContext';
 import { useFavorites } from '@/context/FavoritesContext';
@@ -28,6 +29,7 @@ function ProductDetailContent() {
   const { getProductById } = useProducts();
   const { config } = useSiteConfig();
   const params = useParams();
+  const [isTryOnOpen, setIsTryOnOpen] = useState(false);
   const product = getProductById(params?.id);
 
   if (!product) {
@@ -176,6 +178,18 @@ function ProductDetailContent() {
 
               {/* অ্যাকশন বাটনস */}
               <div className="mt-8 space-y-3">
+                {/* ✨ ভার্চুয়াল ড্রেসিং রুম (Try On) - ফিচার ফ্ল্যাগ অন থাকলে দৃশ্যমান */}
+                {config?.enable_virtual_tryon && (
+                  <button
+                    type="button"
+                    onClick={() => setIsTryOnOpen(true)}
+                    className="w-full py-3.5 bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-lg shadow-purple-600/25 flex items-center justify-center gap-2 transition active:scale-[0.99] border border-white/20"
+                  >
+                    <Sparkles className="w-4 h-4 text-yellow-300 animate-pulse" />
+                    <span>✨ ভার্চুয়াল ড্রেসিং রুম (Try On)</span>
+                  </button>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -242,6 +256,17 @@ function ProductDetailContent() {
             </div>
           </div>
         </div>
+        {/* Virtual Try-On Modal */}
+        <VirtualTryOnModal
+          isOpen={isTryOnOpen}
+          onClose={() => setIsTryOnOpen(false)}
+          product={product}
+          onAddToCart={(p) => {
+            addToCart(p, 1);
+            setIsCartOpen(true);
+          }}
+          onDirectBuy={handleDirectBuy}
+        />
       </main>
     </div>
   );
