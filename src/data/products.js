@@ -1,6 +1,7 @@
 export const PRODUCTS = [
   {
     id: 'solitaire-pendant',
+    badge: '925 Silver',
     name: 'Solitaire Pendant Necklace',
     category: 'Necklace',
     price: 1850,
@@ -53,6 +54,7 @@ export const PRODUCTS = [
   },
   {
     id: 'emerald-silver-ring',
+    badge: '925 Silver',
     name: 'Emerald Cut Silver Ring',
     category: 'Ring',
     price: 2100,

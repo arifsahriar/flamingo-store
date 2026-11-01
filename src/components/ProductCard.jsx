@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Heart, ShoppingBag, Sparkles } from 'lucide-react';
+import { Heart, ShoppingBag } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
@@ -14,6 +14,7 @@ export default function ProductCard({ product }) {
   const { config } = useSiteConfig();
 
   const favorited = isFavorite(product?.id);
+  const badgeText = product?.badge || product?.badge_tag;
 
   const handleFavoriteClick = (e) => {
     e.preventDefault();
@@ -42,18 +43,21 @@ export default function ProductCard({ product }) {
           />
         </Link>
 
-        {/* টপ লেফট ব্যাজ */}
-        <div className="absolute top-2.5 left-2.5 pointer-events-none z-10 flex flex-col gap-1">
-          <span className="bg-white/90 backdrop-blur-md text-[10px] font-bold px-2 py-0.5 rounded-lg text-gray-800 shadow-xs flex items-center gap-1">
-            <Sparkles className="w-2.5 h-2.5 text-pink-600" />
-            {product.category === 'Clothing' ? 'Artisan Weave' : '925 Silver'}
-          </span>
-          {!product.inStock && (
-            <span className="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs">
-              স্টক শেষ
-            </span>
-          )}
-        </div>
+        {/* টপ লেফট ব্যাজ (ডায়নামিক - খালি থাকলে কোনো কন্টেইনার রেন্ডার হবে না) */}
+        {(badgeText || !product.inStock) && (
+          <div className="absolute top-2.5 left-2.5 pointer-events-none z-10 flex flex-col gap-1">
+            {badgeText && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/90 backdrop-blur-sm text-gray-800 shadow-sm border border-gray-100">
+                ✨ {badgeText}
+              </span>
+            )}
+            {!product.inStock && (
+              <span className="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs">
+                স্টক শেষ
+              </span>
+            )}
+          </div>
+        )}
 
         {/* ❤️ ইন্টারঅ্যাক্টিভ হার্ট টগল বাটন (Top Right) */}
         <button

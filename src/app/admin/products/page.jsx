@@ -61,6 +61,7 @@ export default function AdminProductsPage() {
   const [formData, setFormData] = useState({
     name: '',
     category: 'Jewelry',
+    badge: '',
     costPrice: '',
     price: '',
     originalPrice: '',
@@ -106,6 +107,24 @@ export default function AdminProductsPage() {
 
   // লাইভ ব্রেকডাউন
   const liveBreakdown = calculateSellingPriceBreakdown(formData.costPrice, config?.pricingSettings);
+
+  // মিডিয়া URL পরিবর্তন ও স্বয়ংক্রিয় ভিডিও/ইমেজ শনাক্তকরণ (Cloudinary / Supabase Storage / MP4)
+  const handleMediaUrlChange = (val) => {
+    const trimmed = val.trim();
+    const isVideo =
+      /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(trimmed) ||
+      trimmed.includes('/video/upload/');
+
+    setMediaInput((prev) => ({
+      ...prev,
+      url: val,
+      type: trimmed ? (isVideo ? 'VIDEO' : 'IMAGE') : prev.type,
+      thumbnail_url:
+        !prev.thumbnail_url && trimmed.includes('/video/upload/')
+          ? trimmed.replace(/\.(mp4|webm|ogg|mov)$/i, '.jpg')
+          : prev.thumbnail_url,
+    }));
+  };
 
   // মিডিয়া আইটেম যোগ
   const handleAddMediaItem = () => {
@@ -184,6 +203,7 @@ export default function AdminProductsPage() {
     setFormData({
       name: '',
       category: 'Jewelry',
+      badge: '',
       costPrice: '',
       price: '',
       originalPrice: '',
@@ -228,6 +248,7 @@ export default function AdminProductsPage() {
     setFormData({
       name: prod.name || '',
       category: prod.category || 'Jewelry',
+      badge: prod.badge || prod.badge_tag || '',
       costPrice: prod.costPrice || prod.cost_price || '',
       price: prod.price || '',
       originalPrice: prod.originalPrice || '',
@@ -284,6 +305,8 @@ export default function AdminProductsPage() {
     const payload = {
       name: formData.name.trim(),
       category: formData.category,
+      badge: formData.badge ? formData.badge.trim() : '',
+      badge_tag: formData.badge ? formData.badge.trim() : '',
       costPrice: Number(formData.costPrice) || 0,
       cost_price: Number(formData.costPrice) || 0,
       price: Number(formData.price),
@@ -547,9 +570,16 @@ export default function AdminProductsPage() {
 
                       {/* ক্যাটাগরি */}
                       <td className="py-3 px-4">
-                        <span className="font-semibold bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg">
-                          {prod.category}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="font-semibold bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg">
+                            {prod.category}
+                          </span>
+                          {(prod.badge || prod.badge_tag) && (
+                            <span className="text-[10px] font-bold text-pink-700 bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                              ✨ {prod.badge || prod.badge_tag}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* মূল্য */}
@@ -688,7 +718,7 @@ export default function AdminProductsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">জেনেরিক ক্যাটাগরি (Category) *</label>
                   <select
@@ -707,6 +737,17 @@ export default function AdminProductsPage() {
                     <option value="Home Decor">Home Decor (হোম অ্যান্ড লিভিং)</option>
                     <option value="Other">Other (অন্যান্য ফিজিক্যাল প্রোডাক্ট)</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">প্রোডাক্ট ব্যাজ / হাইলাইট ট্যাগ (ঐচ্ছিক)</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: Pure Silk, 925 Silver, Water Resistant, কটন"
+                    value={formData.badge}
+                    onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-white"
+                  />
                 </div>
 
                 <div>
@@ -962,11 +1003,11 @@ export default function AdminProductsPage() {
                         type="text"
                         placeholder={
                           mediaInput.type === 'VIDEO'
-                            ? 'ভিডিও URL (https://... .mp4)'
-                            : 'ইমেজ URL (https://... .jpg)'
+                            ? 'ভিডিও URL (Supabase/Cloudinary/MP4)'
+                            : 'ইমেজ URL (Supabase/Cloudinary/JPG)'
                         }
                         value={mediaInput.url}
-                        onChange={(e) => setMediaInput((prev) => ({ ...prev, url: e.target.value }))}
+                        onChange={(e) => handleMediaUrlChange(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-pink-500 bg-gray-50/50"
                       />
                     </div>
@@ -980,6 +1021,57 @@ export default function AdminProductsPage() {
                       />
                     </div>
                   </div>
+
+                  {/* ইনস্ট্যান্ট লাইভ প্রিভিউ (Instant Miniature Preview) */}
+                  {mediaInput.url.trim() && (
+                    <div className="p-2.5 bg-pink-50/40 rounded-xl border border-pink-200/80 flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-lg overflow-hidden bg-black flex-shrink-0 relative border border-gray-200 shadow-2xs">
+                        {mediaInput.type === 'VIDEO' ? (
+                          <video
+                            src={mediaInput.url.trim()}
+                            autoPlay
+                            muted
+                            playsInline
+                            loop
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <img
+                            src={mediaInput.url.trim()}
+                            alt="প্রিভিউ"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        )}
+                        <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[8px] text-white text-center font-bold">
+                          প্রিভিউ
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                              mediaInput.type === 'VIDEO'
+                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                            }`}
+                          >
+                            {mediaInput.type === 'VIDEO'
+                              ? '🎥 স্বয়ংক্রিয়ভাবে ভিডিও রিল শনাক্ত হয়েছে'
+                              : '📷 স্বয়ংক্রিয়ভাবে ইমেজ শনাক্ত হয়েছে'}
+                          </span>
+                          <span className="text-[9px] text-gray-500 font-medium">
+                            (টাইপ পরিবর্তন করতে উপরে ক্লিক করুন)
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-gray-600 truncate font-mono mt-1">
+                          {mediaInput.url}
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <button
                     type="button"
@@ -1076,7 +1168,7 @@ export default function AdminProductsPage() {
                         রেফারেল কমিশন রিলিজ সিঙ্ক:
                       </label>
                       <div className="p-2 bg-white rounded-xl border border-blue-100 text-[11px] text-blue-900">
-                        ডেলিভারির <strong>{formData.returnDays || 7} দিন</strong> পর আপলাইন কমিশন ওয়ালেটে ক্রেডিট হবে
+                        ডেলিভারির <strong>{formData.returnDays || 7} দিন</strong> পর Upline কমিশন ওয়ালেটে ক্রেডিট হবে
                       </div>
                     </div>
                   </div>
@@ -1085,7 +1177,7 @@ export default function AdminProductsPage() {
                 <div className="pt-2 border-t border-blue-100">
                   <label className="block text-[11px] font-semibold text-gray-700 mb-1 flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>ওয়ারেন্টি টেক্সট (Warranty Text - ঐচ্ছিক):</span>
+                    <span>ওয়ারেন্টি টেক্সট (Warranty Text - ঐচ্ছিক):</span>
                   </label>
                   <input
                     type="text"

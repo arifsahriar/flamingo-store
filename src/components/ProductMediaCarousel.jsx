@@ -3,7 +3,25 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Volume2, VolumeX, Play } from 'lucide-react';
 
-const DEFAULT_IMAGE_DURATION = 3500; // 3.5 seconds per slide
+const DEFAULT_IMAGE_DURATION = 3500; // 3.5 seconds per image
+const MAX_VIDEO_FALLBACK_TIMEOUT = 12000; // 12s safety timeout if video stalls
+
+// Helper: robust video detection for Cloudinary, Supabase Storage, and standard video formats
+export function isMediaVideo(item) {
+  if (!item) return false;
+  if (typeof item === 'object') {
+    if (item.type === 'VIDEO') return true;
+    const url = item.url || '';
+    if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url)) return true;
+    if (url.includes('/video/upload/')) return true;
+    return false;
+  }
+  if (typeof item === 'string') {
+    if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(item)) return true;
+    if (item.includes('/video/upload/')) return true;
+  }
+  return false;
+}
 
 export default function ProductMediaCarousel({
   product,
@@ -17,7 +35,7 @@ export default function ProductMediaCarousel({
   enableSoundToggle = true,
   onSlideChange,
 }) {
-  // 1. Fail-Safe Media Array Fallback & Normalization
+  // 1. Fail-Safe Media Normalization
   const mediaList = React.useMemo(() => {
     let items = [];
     if (Array.isArray(media) && media.length > 0) {
@@ -37,8 +55,8 @@ export default function ProductMediaCarousel({
     return items
       .filter(Boolean)
       .map((item, idx) => {
+        const isVid = isMediaVideo(item);
         if (typeof item === 'string') {
-          const isVid = /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(item);
           return {
             id: `media-${idx}`,
             type: isVid ? 'VIDEO' : 'IMAGE',
@@ -49,9 +67,7 @@ export default function ProductMediaCarousel({
         }
         return {
           id: item.id || `media-${idx}`,
-          type:
-            item.type ||
-            (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(item.url || '') ? 'VIDEO' : 'IMAGE'),
+          type: isVid ? 'VIDEO' : 'IMAGE',
           url: item.url || item.thumbnail_url || '',
           thumbnail_url: item.thumbnail_url || item.url || '',
           display_order: item.display_order ?? idx,
@@ -62,6 +78,7 @@ export default function ProductMediaCarousel({
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
+  const [videoDuration, setVideoDuration] = useState(MAX_VIDEO_FALLBACK_TIMEOUT);
 
   const videoRef = useRef(null);
   const touchStartXRef = useRef(0);
@@ -72,7 +89,7 @@ export default function ProductMediaCarousel({
   const hasMultiple = mediaList.length > 1;
 
   // Slide navigation
-  const goToNext = useCallback(
+  const handleNextSlide = useCallback(
     (e) => {
       if (e) {
         e.preventDefault();
@@ -83,7 +100,7 @@ export default function ProductMediaCarousel({
     [mediaList.length]
   );
 
-  const goToPrev = useCallback(
+  const handlePrevSlide = useCallback(
     (e) => {
       if (e) {
         e.preventDefault();
@@ -94,25 +111,35 @@ export default function ProductMediaCarousel({
     [mediaList.length]
   );
 
-  // Notify parent on slide change
+  // Notify parent on change
   useEffect(() => {
     if (onSlideChange) {
       onSlideChange(currentIndex, currentItem);
     }
   }, [currentIndex, currentItem, onSlideChange]);
 
-  // 1. Reliable, Standalone Auto-Advance Timer (pure setInterval)
+  // Component Playback Logic:
+  // - If IMAGE: Auto-advance after 3500ms using a standard cleanup-safe setInterval
+  // - If VIDEO: Fallback safety timeout (12s) to prevent stalling if onEnded doesn't fire
   useEffect(() => {
     if (!autoPlay || mediaList.length <= 1) return;
 
-    const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % mediaList.length);
-    }, interval || DEFAULT_IMAGE_DURATION);
+    if (!isVideo) {
+      const timer = setInterval(() => {
+        handleNextSlide();
+      }, interval || DEFAULT_IMAGE_DURATION);
 
-    return () => clearInterval(timer);
-  }, [autoPlay, mediaList.length, interval, currentIndex]);
+      return () => clearInterval(timer);
+    } else {
+      const safetyTimeout = setTimeout(() => {
+        handleNextSlide();
+      }, MAX_VIDEO_FALLBACK_TIMEOUT);
 
-  // 3. Mobile Video Policy Fix (Prevent Freezing)
+      return () => clearTimeout(safetyTimeout);
+    }
+  }, [autoPlay, mediaList.length, isVideo, currentIndex, interval, handleNextSlide]);
+
+  // Video Autoplay & Lifecycle management
   useEffect(() => {
     if (isVideo && videoRef.current) {
       const vid = videoRef.current;
@@ -120,13 +147,33 @@ export default function ProductMediaCarousel({
       vid.muted = isMuted;
       vid.playsInline = true;
       vid.currentTime = 0;
-      vid.play().catch(() => {
-        /* Ignore autoplay restrictions */
-      });
+
+      const handleLoadedMetadata = () => {
+        if (vid.duration && !isNaN(vid.duration)) {
+          // Duration in ms, capped at 15 seconds
+          setVideoDuration(Math.min(vid.duration * 1000, 15000));
+        }
+      };
+
+      vid.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+      const playPromise = vid.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // Autoplay policy prevented playback, force mute and retry
+          vid.muted = true;
+          setIsMuted(true);
+          vid.play().catch(() => {});
+        });
+      }
+
+      return () => {
+        vid.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      };
     }
   }, [currentIndex, isVideo, isMuted]);
 
-  // Touch Swipe gestures for mobile
+  // Mobile Touch Swipe Handling
   const handleTouchStart = (e) => {
     touchStartXRef.current = e.touches[0].clientX;
     touchDeltaXRef.current = 0;
@@ -140,9 +187,9 @@ export default function ProductMediaCarousel({
   const handleTouchEnd = () => {
     if (hasMultiple && Math.abs(touchDeltaXRef.current) >= 40) {
       if (touchDeltaXRef.current < 0) {
-        goToNext();
+        handleNextSlide();
       } else {
-        goToPrev();
+        handlePrevSlide();
       }
     }
     touchStartXRef.current = 0;
@@ -161,6 +208,8 @@ export default function ProductMediaCarousel({
     }
   };
 
+  const activeDuration = isVideo ? videoDuration : (interval || DEFAULT_IMAGE_DURATION);
+
   return (
     <div
       className={`relative overflow-hidden group select-none touch-pan-y ${aspectRatio} ${className}`}
@@ -168,7 +217,7 @@ export default function ProductMediaCarousel({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* CSS Animation Keyframes for Story Fill */}
+      {/* Dynamic Keyframes for Story Indicator Fill */}
       <style>
         {`
           @keyframes storyFill {
@@ -188,11 +237,13 @@ export default function ProductMediaCarousel({
             autoPlay
             muted={isMuted}
             playsInline
+            loop={false}
             preload="metadata"
-            onEnded={() => setCurrentIndex((prev) => (prev + 1) % mediaList.length)}
+            onEnded={() => handleNextSlide()}
+            onError={() => handleNextSlide()}
             className="w-full h-full object-cover transition-opacity duration-300"
           />
-          {/* Video Reel Indicator Badge */}
+          {/* Video Reel Badge */}
           <div className="absolute top-4 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 z-10 pointer-events-none">
             <Play className="w-2.5 h-2.5 fill-current text-pink-400" />
             <span>ভিডিও রিল</span>
@@ -207,7 +258,7 @@ export default function ProductMediaCarousel({
         />
       )}
 
-      {/* 2. Story-Style Top Progress Indicators (Smooth Fill according to currentIndex) */}
+      {/* Top Story Progress Bars (reflecting active index accurately) */}
       {showStoryBars && hasMultiple && (
         <div className="absolute top-2.5 inset-x-2.5 z-20 flex gap-1.5 px-0.5 pointer-events-none">
           {mediaList.map((item, idx) => {
@@ -222,15 +273,11 @@ export default function ProductMediaCarousel({
                 <div
                   key={`${idx}-${currentIndex}`}
                   className={`h-full bg-white/95 rounded-full ${
-                    isCompleted
-                      ? 'w-full'
-                      : isActive
-                      ? 'w-0'
-                      : 'w-0'
+                    isCompleted ? 'w-full' : 'w-0'
                   }`}
                   style={
                     isActive
-                      ? { animation: `storyFill ${interval || DEFAULT_IMAGE_DURATION}ms linear forwards` }
+                      ? { animation: `storyFill ${activeDuration}ms linear forwards` }
                       : undefined
                   }
                 />
@@ -240,30 +287,28 @@ export default function ProductMediaCarousel({
         </div>
       )}
 
-      {/* 4. Tap to Advance (Instant Mobile Interaction: Left Half -> Prev, Right Half -> Next) */}
+      {/* Tap to Advance (Left Half -> Prev, Right Half -> Next) */}
       {hasMultiple && (
         <div className="absolute inset-0 z-10 flex">
-          {/* Left half: Tap to Previous */}
           <div
             className="w-1/2 h-full cursor-pointer"
-            onClick={goToPrev}
+            onClick={handlePrevSlide}
             aria-label="Previous slide"
           />
-          {/* Right half: Tap to Next */}
           <div
             className="w-1/2 h-full cursor-pointer"
-            onClick={goToNext}
+            onClick={handleNextSlide}
             aria-label="Next slide"
           />
         </div>
       )}
 
-      {/* Navigation Arrows (Desktop hover) */}
+      {/* Desktop Controls */}
       {showControls && hasMultiple && (
         <div className="hidden sm:block">
           <button
             type="button"
-            onClick={goToPrev}
+            onClick={handlePrevSlide}
             aria-label="Previous slide"
             className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200 z-20 active:scale-95 shadow-md"
           >
@@ -271,7 +316,7 @@ export default function ProductMediaCarousel({
           </button>
           <button
             type="button"
-            onClick={goToNext}
+            onClick={handleNextSlide}
             aria-label="Next slide"
             className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200 z-20 active:scale-95 shadow-md"
           >
@@ -280,7 +325,7 @@ export default function ProductMediaCarousel({
         </div>
       )}
 
-      {/* Sound Toggle (When Video is Active) */}
+      {/* Sound Toggle */}
       {isVideo && enableSoundToggle && (
         <button
           type="button"

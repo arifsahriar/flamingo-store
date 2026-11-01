@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
-import { Heart, X, ChevronUp, Sparkles, ShieldCheck, ShoppingBag } from 'lucide-react';
+import { Heart, X, ChevronUp, ShieldCheck, ShoppingBag } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useFavorites } from '@/context/FavoritesContext';
 import { useSiteConfig } from '@/context/SiteConfigContext';
@@ -91,13 +91,14 @@ export default function SwipeCard({ product, onSwipeLeft, onSwipeRight, onDirect
         {/* কার্ডের তথ্য */}
         <div className="absolute bottom-12 left-0 right-0 px-6 text-white pointer-events-none z-10">
           <div className="flex items-center gap-2 mb-2">
-            <span 
-              className="text-white text-[11px] px-2.5 py-0.5 rounded-full font-bold inline-flex items-center gap-1 shadow-sm"
-              style={{ backgroundColor: config.primaryColor }}
-            >
-              <Sparkles className="w-3 h-3" />
-              {product.category === 'Clothing' ? 'Artisan Attire' : '৯২৫ স্টার্লিং সিলভার'}
-            </span>
+            {(product.badge || product.badge_tag) && (
+              <span 
+                className="text-white text-[11px] px-2.5 py-0.5 rounded-full font-bold inline-flex items-center gap-1 shadow-sm"
+                style={{ backgroundColor: config.primaryColor }}
+              >
+                ✨ {product.badge || product.badge_tag}
+              </span>
+            )}
             <span className="text-[10px] bg-white/20 backdrop-blur-md text-white px-2 py-0.5 rounded-full font-medium">
               {product.category}
             </span>

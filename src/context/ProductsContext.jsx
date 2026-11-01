@@ -73,6 +73,8 @@ const mapSupabaseProduct = (row) => {
     returnDays: typeof row.return_days === 'number' ? Number(row.return_days) : 0,
     return_days: typeof row.return_days === 'number' ? Number(row.return_days) : 0,
     shortDescription: row.short_description || '',
+    badge: row.badge || row.badge_tag || '',
+    badge_tag: row.badge_tag || row.badge || '',
     description: row.description || '',
     specs: row.specs || {},
   };
@@ -103,6 +105,8 @@ const mapToSupabaseProduct = (p) => {
     short_description: p.shortDescription || '',
     purity: p.purity || '৯২৫ স্টার্লিং সিলভার',
     coating: p.coating || 'অ্যান্টি-টার্নিশ রোডিয়াম ফিনিশ',
+    badge: p.badge || p.badge_tag || '',
+    badge_tag: p.badge_tag || p.badge || '',
     specs: p.specs || {},
   };
 };

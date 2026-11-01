@@ -155,10 +155,11 @@ export default function FavoritesPage() {
 
                   {/* ব্যাজসমূহ */}
                   <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 pointer-events-none">
-                    <span className="bg-white/95 backdrop-blur-md text-[11px] font-bold px-3 py-1 rounded-xl text-gray-900 shadow-md flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-pink-600" />
-                      {product.category === 'Clothing' ? 'Artisan Attire' : '৯২৫ সিলভার'}
-                    </span>
+                    {(product.badge || product.badge_tag) && (
+                      <span className="bg-white/95 backdrop-blur-md text-[11px] font-bold px-3 py-1 rounded-xl text-gray-900 shadow-md flex items-center gap-1.5">
+                        ✨ {product.badge || product.badge_tag}
+                      </span>
+                    )}
                     <span className="bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold px-2.5 py-1 rounded-xl">
                       {product.category}
                     </span>

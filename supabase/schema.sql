@@ -213,6 +213,8 @@ alter table public.products add column if not exists cost_price numeric default 
 alter table public.products add column if not exists return_policy_type text not null default 'NO_RETURN' check (return_policy_type in ('NO_RETURN', 'RETURNABLE'));
 alter table public.products add column if not exists return_days integer not null default 0;
 alter table public.products add column if not exists warranty_text text;
+alter table public.products add column if not exists badge text;
+alter table public.products add column if not exists badge_tag text;
 
 -- 2. Profiles and N-Tier MLM Downline Chains
 create table if not exists public.profiles (
