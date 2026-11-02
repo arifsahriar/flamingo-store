@@ -7,6 +7,12 @@ import {
   savePricingSettings, 
   getCachedPricingSettings 
 } from '@/lib/pricingEngine';
+import {
+  DEFAULT_SITE_SETTINGS,
+  fetchSiteSettings,
+  saveSiteSettings,
+  getCachedSiteSettings
+} from '@/lib/siteSettings';
 
 // ডিফল্ট টেক্সট, কালার, ডেলিভারি চার্জ ও কুপন
 const DEFAULT_CONFIG = {
@@ -44,8 +50,10 @@ const SiteConfigContext = createContext();
 
 export function SiteConfigProvider({ children }) {
   const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [siteSettings, setSiteSettings] = useState(DEFAULT_SITE_SETTINGS);
 
   useEffect(() => {
+    // 1. সাইট কনফিগ ও প্রাইসিং লোড
     try {
       const saved = localStorage.getItem('flamingo_site_config');
       const cachedPricing = getCachedPricingSettings();
@@ -73,7 +81,13 @@ export function SiteConfigProvider({ children }) {
       console.error('Failed to parse flamingo_site_config:', e);
     }
 
-    // ব্যাকগ্রাউন্ডে সুপাবেজ প্রাইসিং সেটিংস ফেচ
+    // 2. সাইট সেটিংস ও ফুটার ইনফো ক্যাশ লোড
+    const cachedSite = getCachedSiteSettings();
+    if (cachedSite) {
+      setSiteSettings(cachedSite);
+    }
+
+    // 3. ব্যাকগ্রাউন্ডে সুপাবেজ প্রাইসিং সেটিংস ফেচ
     fetchPricingSettings().then((remotePricing) => {
       if (remotePricing) {
         setConfig((prev) => ({
@@ -82,6 +96,13 @@ export function SiteConfigProvider({ children }) {
           deliveryChargeInsideDhaka: remotePricing.advance_delivery_inside_city ?? prev.deliveryChargeInsideDhaka,
           deliveryChargeOutsideDhaka: remotePricing.advance_delivery_outside_city ?? prev.deliveryChargeOutsideDhaka,
         }));
+      }
+    });
+
+    // 4. ব্যাকগ্রাউন্ডে সুপাবেজ সাইট সেটিংস (ফুটার, পলিসি, ট্রাস্ট ব্যাজ) ফেচ
+    fetchSiteSettings().then((remoteSettings) => {
+      if (remoteSettings) {
+        setSiteSettings(remoteSettings);
       }
     });
   }, []);
@@ -114,17 +135,41 @@ export function SiteConfigProvider({ children }) {
     return res;
   };
 
+  const updateSiteSettingsState = async (newSettings) => {
+    // অবিলম্বে স্টেট ও ক্যাশ আপডেট
+    setSiteSettings((prev) => ({
+      ...prev,
+      ...newSettings,
+    }));
+    const res = await saveSiteSettings(newSettings);
+    if (res.success && res.settings) {
+      setSiteSettings(res.settings);
+    }
+    return res;
+  };
+
   const resetToDefault = () => {
     setConfig(DEFAULT_CONFIG);
+    setSiteSettings(DEFAULT_SITE_SETTINGS);
     try {
       localStorage.removeItem('flamingo_site_config');
+      localStorage.removeItem('flamingo_site_settings');
     } catch (e) {
       console.error(e);
     }
   };
 
   return (
-    <SiteConfigContext.Provider value={{ config, updateConfig, updatePricing, resetToDefault, DEFAULT_CONFIG }}>
+    <SiteConfigContext.Provider value={{ 
+      config, 
+      updateConfig, 
+      updatePricing, 
+      siteSettings, 
+      updateSiteSettings: updateSiteSettingsState, 
+      resetToDefault, 
+      DEFAULT_CONFIG,
+      DEFAULT_SITE_SETTINGS
+    }}>
       <div 
         style={{
           fontFamily: config.fontFamily === 'serif' ? 'serif' : 'sans-serif',

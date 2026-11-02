@@ -4,19 +4,24 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { registerUplineChain } from '@/lib/mlmEngine';
 import { getCustomerWallet } from '@/lib/walletService';
+import { normalizeRole } from '@/lib/userService';
 
 const DEFAULT_STAFF_USERS = [
   {
+    id: 'staff_super_admin',
     username: 'admin',
     password: 'password123',
-    role: 'superadmin',
+    role: 'super_admin',
     name: 'FLAMINGO Admin',
+    email: 'admin@flamingostore.com',
   },
   {
+    id: 'staff_moderator',
     username: 'moderator',
     password: 'mod123',
     role: 'moderator',
     name: 'Order Moderator',
+    email: 'moderator@flamingostore.com',
   },
 ];
 
@@ -66,13 +71,49 @@ export function AuthProvider({ children }) {
       // ৩. বর্তমান লগইন থাকা অ্যাডমিন
       const savedAdmin = localStorage.getItem('flamingo_current_admin');
       if (savedAdmin) {
-        setCurrentAdmin(JSON.parse(savedAdmin));
+        const parsedAdmin = JSON.parse(savedAdmin);
+        parsedAdmin.role = normalizeRole(parsedAdmin.role);
+        setCurrentAdmin(parsedAdmin);
       }
     } catch (e) {
       console.error('Error initializing auth from localStorage:', e);
     } finally {
       setIsAuthLoaded(true);
     }
+
+    // ব্যাকগ্রাউন্ডে সুপাবেজ profiles থেকে অ্যাডমিন ও রোল সিঙ্ক
+    const syncRoleFromProfiles = async () => {
+      if (!isSupabaseConfigured()) return;
+      try {
+        const adminRaw = localStorage.getItem('flamingo_current_admin');
+        if (adminRaw) {
+          const curAdmin = JSON.parse(adminRaw);
+          const filterQuery = curAdmin.id
+            ? `id.eq.${curAdmin.id}`
+            : `email.eq.${curAdmin.email || curAdmin.username},phone.eq.${curAdmin.username || ''}`;
+
+          const { data } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, role')
+            .or(filterQuery)
+            .maybeSingle();
+
+          if (data && data.role) {
+            const updated = {
+              ...curAdmin,
+              role: normalizeRole(data.role),
+              name: data.full_name || curAdmin.name,
+            };
+            setCurrentAdmin(updated);
+            localStorage.setItem('flamingo_current_admin', JSON.stringify(updated));
+          }
+        }
+      } catch (err) {
+        console.warn('Profile role sync fallback:', err);
+      }
+    };
+
+    syncRoleFromProfiles();
 
     // সুপাবেজ থেকে কাস্টমার তালিকা সিঙ্ক (ব্যাকগ্রাউন্ড)
     const syncCustomersFromSupabase = async () => {
@@ -352,15 +393,16 @@ export function AuthProvider({ children }) {
   };
 
   // --- অ্যাডমিন লগইন ---
-  const loginAdmin = ({ username, password }) => {
+  const loginAdmin = async ({ username, password }) => {
     try {
+      const cleanU = username.trim().toLowerCase();
       const staffList = JSON.parse(
         localStorage.getItem('flamingo_staff_users') || JSON.stringify(DEFAULT_STAFF_USERS)
       );
 
       const matchedStaff = staffList.find(
         (staff) =>
-          staff.username.toLowerCase() === username.trim().toLowerCase() &&
+          staff.username.toLowerCase() === cleanU &&
           staff.password === password
       );
 
@@ -368,10 +410,29 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'ভুল অ্যাডমিন ইউজারনেম অথবা পাসওয়ার্ড!' };
       }
 
+      let role = normalizeRole(matchedStaff.role);
+
+      // Check if Supabase profiles has updated role
+      if (isSupabaseConfigured()) {
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, role')
+            .or(`email.eq.${matchedStaff.email || cleanU},phone.eq.${cleanU}`)
+            .maybeSingle();
+
+          if (data && data.role) {
+            role = normalizeRole(data.role);
+          }
+        } catch (e) {}
+      }
+
       const safeAdmin = {
+        id: matchedStaff.id || `staff_${matchedStaff.username}`,
         username: matchedStaff.username,
-        role: matchedStaff.role, // 'superadmin' | 'moderator'
+        role: role, // 'super_admin' | 'moderator'
         name: matchedStaff.name,
+        email: matchedStaff.email || `${matchedStaff.username}@flamingostore.com`,
       };
 
       localStorage.setItem('flamingo_current_admin', JSON.stringify(safeAdmin));
@@ -411,17 +472,36 @@ export function AuthProvider({ children }) {
       );
 
       if (matchedStaff) {
+        let role = normalizeRole(matchedStaff.role);
+
+        // Supabase profiles check
+        if (isSupabaseConfigured()) {
+          try {
+            const { data } = await supabase
+              .from('profiles')
+              .select('id, full_name, email, role')
+              .or(`email.eq.${matchedStaff.email || cleanIden},phone.eq.${cleanIden}`)
+              .maybeSingle();
+
+            if (data && data.role) {
+              role = normalizeRole(data.role);
+            }
+          } catch (e) {}
+        }
+
         const safeAdmin = {
+          id: matchedStaff.id || `staff_${matchedStaff.username}`,
           username: matchedStaff.username,
-          role: matchedStaff.role, // 'superadmin' | 'moderator'
+          role: role,
           name: matchedStaff.name,
+          email: matchedStaff.email || `${matchedStaff.username}@flamingostore.com`,
         };
         localStorage.setItem('flamingo_current_admin', JSON.stringify(safeAdmin));
         setCurrentAdmin(safeAdmin);
         return { 
           success: true, 
           userType: 'admin', 
-          role: matchedStaff.role, 
+          role: role, 
           admin: safeAdmin 
         };
       }

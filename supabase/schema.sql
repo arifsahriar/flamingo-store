@@ -327,3 +327,41 @@ alter table public.customers add column if not exists weight_kg numeric;
 alter table public.customers add column if not exists gender text check (gender in ('male', 'female', 'other'));
 alter table public.customers add column if not exists daily_tryon_used integer not null default 0;
 alter table public.customers add column if not exists last_tryon_date text;
+
+
+-- 7. SITE SETTINGS TABLE (Footer, Trust Badges, Policies & Contact Info)
+create table if not exists public.site_settings (
+  id integer primary key default 1,
+  about_text text,
+  support_phone text,
+  support_whatsapp text,
+  address text,
+  facebook_url text,
+  instagram_url text,
+  copyright_text text,
+  trust_badges jsonb default '[]'::jsonb,
+  policy_delivery text,
+  policy_warranty text,
+  policy_exchange text,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+alter table public.site_settings enable row level security;
+
+create policy "Allow public read on site_settings" on public.site_settings for select using (true);
+create policy "Allow public insert on site_settings" on public.site_settings for insert with check (true);
+create policy "Allow public update on site_settings" on public.site_settings for update using (true);
+
+
+-- 8. PROFILES ROLE MANAGEMENT (Role-Based Access Control)
+alter table public.profiles add column if not exists role text not null default 'customer';
+alter table public.profiles add column if not exists full_name text;
+alter table public.profiles add column if not exists updated_at timestamp with time zone default timezone('utc'::text, now());
+
+drop policy if exists "Allow public read on profiles" on public.profiles;
+drop policy if exists "Allow public insert on profiles" on public.profiles;
+drop policy if exists "Allow public update on profiles" on public.profiles;
+
+create policy "Allow public read on profiles" on public.profiles for select using (true);
+create policy "Allow public insert on profiles" on public.profiles for insert with check (true);
+create policy "Allow public update on profiles" on public.profiles for update using (true);

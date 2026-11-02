@@ -38,6 +38,8 @@ import {
   voidOrderCommissions, 
   processMaturedCommissions 
 } from '@/lib/walletService';
+import AdminRouteGuard from '@/components/admin/AdminRouteGuard';
+import AdminNavbar from '@/components/admin/AdminNavbar';
 
 // Supabase order -> Admin Order Shape
 const mapSupabaseOrder = (row) => ({
@@ -385,105 +387,29 @@ export default function AdminOrdersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FDF9FA] py-8 sm:py-10 px-4 sm:px-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        
-        {/* টপ হেডার ও নেভিগেশন */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-pink-100 gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2.5 mb-2 text-xs font-semibold">
-              <Link 
-                href="/admin/settings?tab=theme" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
-              </Link>
-              <span className="text-gray-300">|</span>
-              {currentAdmin.role === 'superadmin' ? (
-                <Link 
-                  href="/admin/settings?tab=business" 
-                  className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-                >
-                  <DollarSign className="w-3.5 h-3.5" /> বিজনেস মার্জিন
-                </Link>
-              ) : (
-                <span className="text-gray-400 cursor-not-allowed flex items-center gap-1" title="শুধুমাত্র সুপারঅ্যাডমিন অ্যাক্সেস">
-                  <DollarSign className="w-3.5 h-3.5" /> মার্জিন (লক)
-                </span>
-              )}
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/admin/settings?tab=coupons" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <Tag className="w-3.5 h-3.5" /> কুপন ও মার্কেটিং
-              </Link>
-              <span className="text-gray-300">|</span>
-              <span className="text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <Package className="w-3.5 h-3.5" /> অর্ডার ম্যানেজমেন্ট
+    <AdminRouteGuard requiredRole="moderator">
+      <div className="min-h-screen bg-[#FDF9FA] py-8 sm:py-10 px-4 sm:px-8">
+        <div className="max-w-6xl mx-auto space-y-6">
+          
+          {/* টপ হেডার ও নেভিগেশন */}
+          <AdminNavbar activePage="orders" />
+
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-pink-100 gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-serif font-bold text-gray-900 flex items-center gap-2.5">
+                <Package className="w-7 h-7 text-pink-600" /> FLAMINGO অর্ডার ম্যানেজমেন্ট
+              </h1>
+              <p className="text-xs text-gray-500 mt-1">
+                ক্যাশ অন ডেলিভারি অর্ডার তালিকা, কাস্টমার ডিটেইলস ও আইটেম-লেভেল ওয়ারেন্টি ট্র্যাকিং।
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-mono font-bold bg-pink-50 text-pink-700 px-3 py-2 rounded-xl border border-pink-100">
+                মোট: {orders.length} টি
               </span>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/admin/products" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <Sparkles className="w-3.5 h-3.5" /> প্রোডাক্ট ক্যাটালগ
-              </Link>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/admin/customers" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <Users className="w-3.5 h-3.5" /> কাস্টমার CRM
-              </Link>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/collections" 
-                target="_blank"
-                className="text-gray-400 hover:text-gray-700 flex items-center gap-1"
-              >
-                <span>স্টোরফ্রন্ট</span>
-                <ExternalLink className="w-3 h-3" />
-              </Link>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-serif font-bold text-gray-900 flex items-center gap-2.5">
-              <Package className="w-7 h-7 text-pink-600" /> FLAMINGO অর্ডার ম্যানেজমেন্ট
-            </h1>
-            <p className="text-xs text-gray-500 mt-1">
-              ক্যাশ অন ডেলিভারি অর্ডার তালিকা, কাস্টমার ডিটেইলস ও আইটেম-লেভেল ওয়ারেন্টি ট্র্যাকিং।
-            </p>
           </div>
-
-          <div className="flex items-center gap-3">
-            {/* অ্যাডমিন প্রোফাইল ব্যাজ ও লগআউট */}
-            <div className="flex items-center gap-2.5 bg-white p-2 sm:px-3 rounded-2xl border border-gray-200 shadow-xs text-xs">
-              <div className="text-right">
-                <div className="font-bold text-gray-900 leading-tight">{currentAdmin.name}</div>
-                <span className={`text-[10px] font-semibold px-2 py-0.2 rounded-md ${
-                  currentAdmin.role === 'superadmin' 
-                    ? 'bg-pink-50 text-pink-700' 
-                    : 'bg-blue-50 text-blue-700'
-                }`}>
-                  {currentAdmin.role === 'superadmin' ? 'Super Admin' : 'Order Moderator'}
-                </span>
-              </div>
-              <button
-                onClick={() => {
-                  logoutAdmin();
-                  router.push('/admin/login');
-                }}
-                className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
-                title="লগআউট"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-
-            <span className="text-xs font-mono font-bold bg-pink-50 text-pink-700 px-3 py-2 rounded-xl border border-pink-100">
-              মোট: {orders.length} টি
-            </span>
-          </div>
-        </div>
 
         {/* সামারি মেট্রিক কার্ডসমূহ */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1012,7 +938,8 @@ export default function AdminOrdersPage() {
             </div>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </AdminRouteGuard>
   );
 }

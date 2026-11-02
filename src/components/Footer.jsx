@@ -5,6 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { 
+  DEFAULT_SITE_SETTINGS, 
+  formatPhoneForHref, 
+  formatWhatsAppForHref 
+} from '@/lib/siteSettings';
+import { 
   ShieldCheck, 
   Truck, 
   RotateCcw, 
@@ -37,9 +42,11 @@ function InstagramIcon({ className = "w-4 h-4" }) {
   );
 }
 
+const BADGE_ICONS = [Sparkles, Truck, ShieldCheck, RotateCcw];
+
 export default function Footer() {
   const pathname = usePathname();
-  const { config } = useSiteConfig();
+  const { config, siteSettings } = useSiteConfig();
   const [activePolicy, setActivePolicy] = useState(null);
   const [currentYear, setCurrentYear] = useState('2026');
 
@@ -57,87 +64,80 @@ export default function Footer() {
     return null;
   }
 
+  // রেজিলিয়েন্ট ডেটা মার্জিং (fallback guarantee)
+  const currentSettings = {
+    ...DEFAULT_SITE_SETTINGS,
+    ...(siteSettings || {}),
+  };
+
+  // ৪টি ট্রাস্ট ব্যাজ (সুপাবেজ site_settings থেকে প্রাপ্ত অথবা ডিফল্ট ফলব্যাক)
+  const trustBadges = Array.isArray(currentSettings.trust_badges) && currentSettings.trust_badges.length === 4
+    ? currentSettings.trust_badges.map((b, i) => ({
+        title: b?.title || DEFAULT_SITE_SETTINGS.trust_badges[i].title,
+        subtitle: b?.subtitle || DEFAULT_SITE_SETTINGS.trust_badges[i].subtitle,
+      }))
+    : DEFAULT_SITE_SETTINGS.trust_badges;
+
   const policies = {
     delivery: {
       title: 'ডেলিভারি পলিসি ও চার্জ',
-      content: `• ঢাকা সিটির ভেতরে ডেলিভারি চার্জ ৳${config.deliveryChargeInsideDhaka || 80} (২-৩ কার্যদিবস)।
-• ঢাকা সিটির বাইরে ও সমগ্র বাংলাদেশে ডেলিভারি চার্জ ৳${config.deliveryChargeOutsideDhaka || 130} (৩-৫ কার্যদিবস)।
+      content: currentSettings.policy_delivery || `• ঢাকা সিটির ভেতরে ডেলিভারি চার্জ ৳${config.deliveryChargeInsideDhaka || 80} (২-৩ কার্যদিবস)।
+• ঢাকা সিটির বাইরে ও সমগ্র বাংলাদেশে ডেলিভারি চার্জ ৳${config.deliveryChargeOutsideDhaka || 150} (৩-৫ কার্যদিবস)।
 • ক্যাশ অন ডেলিভারি প্রযোজ্য। পার্সেল হাতে পেয়ে ডেলিভারিম্যানের সামনে চেক করে মূল্য পরিশোধের শতভাগ নিশ্চয়তা রয়েছে।`,
     },
     warranty: {
       title: 'ওয়ারেন্টি ও ফ্রি পলিশিং পলিসি',
-      content: `• প্রতিটি ৯২৫ সিলভার গহনার সাথে আন্তর্জাতিক হলমার্ক সার্টিফিকেট প্রদান করা হয়।
+      content: currentSettings.policy_warranty || `• প্রতিটি ৯২৫ সিলভার গহনার সাথে আন্তর্জাতিক হলমার্ক সার্টিফিকেট প্রদান করা হয়।
 • নির্দিষ্ট মেয়াদের (৬ মাস/১ বছর) ফ্রি রিপলিশিং ও অ্যান্টি-টার্নিশ কেয়ার সাপোর্ট।
 • 'অর্ডার ট্র্যাক' পেজে গিয়ে অর্ডার আইডি বা মোবাইল নম্বর দিয়ে যেকোনো সময় ওয়ারেন্টি ক্লেইম মেমো ডাউনলোড করতে পারবেন।`,
     },
     exchange: {
       title: '৭ দিনের সহজ রিটার্ন ও এক্সচেঞ্জ পলিসি',
-      content: `• পার্সেল গ্রহণের ৭ দিনের মধ্যে যেকোনো সাইজ বা মডেল পরিবর্তনের সুযোগ।
+      content: currentSettings.policy_exchange || `• পার্সেল গ্রহণের ৭ দিনের মধ্যে যেকোনো সাইজ বা মডেল পরিবর্তনের সুযোগ।
 • গহনা অব্যবহৃত ও মূল গিফট বক্সে থাকতে হবে।
 • কাস্টমার সাপোর্টে কল বা হোয়াটসঅ্যাপে মেসেজ দিয়ে সহজে রিটার্ন পিকআপ বুক করতে পারবেন।`,
     },
   };
 
+  const supportPhone = currentSettings.support_phone || DEFAULT_SITE_SETTINGS.support_phone;
+  const supportWhatsapp = currentSettings.support_whatsapp || DEFAULT_SITE_SETTINGS.support_whatsapp;
+  const storeAddress = currentSettings.address || DEFAULT_SITE_SETTINGS.address;
+  const aboutBrand = currentSettings.about_text || DEFAULT_SITE_SETTINGS.about_text;
+  const copyrightNotice = currentSettings.copyright_text || `© ${currentYear} ${config.brandName || 'FLAMINGO'}. সর্বস্বত্ব সংরক্ষিত। খাঁটি ৯২৫ স্টার্লিং সিলভার জুয়েলারি।`;
+
+  const phoneHref = `tel:${formatPhoneForHref(supportPhone)}`;
+  const whatsappHref = formatWhatsAppForHref(supportWhatsapp, 'Hello FLAMINGO');
+  const facebookHref = currentSettings.facebook_url || 'https://facebook.com';
+  const instagramHref = currentSettings.instagram_url || 'https://instagram.com';
+
   return (
     <footer className="no-print print:hidden bg-white border-t border-pink-100 text-gray-700 text-xs transition-colors">
       
-      {/* ১. ট্রাস্ট ব্যাজ সেকশন */}
+      {/* ১. ট্রাস্ট ব্যাজ সেকশন (সুপাবেজ site_settings থেকে ডায়নামিক) */}
       <div className="border-b border-pink-100/70 bg-[#FFF9FA]">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 py-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center sm:text-left">
-            
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <div 
-                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-xs"
-                style={{ backgroundColor: '#FDF2F8', color: config.primaryColor || '#DB2777' }}
-              >
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-serif font-bold text-gray-900 text-sm">১০০% খাঁটি ৯২৫ সিলভার</h4>
-                <p className="text-[11px] text-gray-500 mt-0.5">আন্তর্জাতিক হলমার্ক সার্টিফাইড</p>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <div 
-                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-xs"
-                style={{ backgroundColor: '#FDF2F8', color: config.primaryColor || '#DB2777' }}
-              >
-                <Truck className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-serif font-bold text-gray-900 text-sm">ক্যাশ অন ডেলিভারি</h4>
-                <p className="text-[11px] text-gray-500 mt-0.5">পার্সেল চেক করে পেমেন্ট করার সুযোগ</p>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <div 
-                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-xs"
-                style={{ backgroundColor: '#FDF2F8', color: config.primaryColor || '#DB2777' }}
-              >
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-serif font-bold text-gray-900 text-sm">লাইভ ওয়ারেন্টি সাপোর্ট</h4>
-                <p className="text-[11px] text-gray-500 mt-0.5">ফ্রি পলিশিং ও অ্যান্টি-টার্নিশ কেয়ার</p>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <div 
-                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-xs"
-                style={{ backgroundColor: '#FDF2F8', color: config.primaryColor || '#DB2777' }}
-              >
-                <RotateCcw className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-serif font-bold text-gray-900 text-sm">৭ দিনের সহজ এক্সচেঞ্জ</h4>
-                <p className="text-[11px] text-gray-500 mt-0.5">ঝামেলাবিহীন সাইজ ও মডেল পরিবর্তন</p>
-              </div>
-            </div>
-
+            {trustBadges.map((badge, idx) => {
+              const Icon = BADGE_ICONS[idx % BADGE_ICONS.length] || Sparkles;
+              return (
+                <div key={idx} className="flex flex-col sm:flex-row items-center gap-3">
+                  <div 
+                    className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-xs"
+                    style={{ backgroundColor: '#FDF2F8', color: config.primaryColor || '#DB2777' }}
+                  >
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-serif font-bold text-gray-900 text-sm">
+                      {badge.title}
+                    </h4>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      {badge.subtitle}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -146,7 +146,7 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-8 py-12 sm:py-16">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12">
           
-          {/* ব্র্যান্ড পরিচিতি কলাম */}
+          {/* ব্র্যান্ড পরিচিতি কলাম (সুপাবেজ site_settings থেকে ডায়নামিক) */}
           <div className="md:col-span-4 space-y-4">
             <Link href="/" className="flex items-center gap-2.5">
               {config.logoUrl && (
@@ -171,13 +171,13 @@ export default function Footer() {
             </Link>
 
             <p className="text-gray-500 leading-relaxed text-[11.5px]">
-              খাঁটি ৯২৫ স্টার্লিং সিলভারের লাক্সারি ও মার্জিত ডিজাইনের বিশ্বস্ত ঠিকানা। সংবেদনশীল ত্বকের জন্য শতভাগ অ্যালার্জি-মুক্ত রোডিয়াম কোটিং ও সার্টিফাইড বিশুদ্ধতার অনন্য মেলবন্ধন।
+              {aboutBrand}
             </p>
 
-            {/* সোশ্যাল লিংকস */}
+            {/* সোশ্যাল লিংকস (ফেসবুক, ইনস্টাগ্রাম ও হোয়াটসঅ্যাপ) */}
             <div className="flex items-center gap-2.5 pt-1">
               <a
-                href="https://facebook.com"
+                href={facebookHref}
                 target="_blank"
                 rel="noreferrer"
                 className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-pink-100/60 hover:text-pink-600 flex items-center justify-center transition"
@@ -186,7 +186,7 @@ export default function Footer() {
                 <FacebookIcon className="w-4 h-4" />
               </a>
               <a
-                href="https://instagram.com"
+                href={instagramHref}
                 target="_blank"
                 rel="noreferrer"
                 className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-pink-100/60 hover:text-pink-600 flex items-center justify-center transition"
@@ -195,11 +195,11 @@ export default function Footer() {
                 <InstagramIcon className="w-4 h-4" />
               </a>
               <a
-                href="https://wa.me/8801700000000?text=Hello%20FLAMINGO%20Jewelry"
+                href={whatsappHref}
                 target="_blank"
                 rel="noreferrer"
                 className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 flex items-center justify-center transition"
-                title="হোয়াটসঅ্যাপে মেসেজ দিন"
+                title={`হোয়াটসঅ্যাপে সরাসরি চ্যাট করুন (${supportWhatsapp})`}
               >
                 <MessageCircle className="w-4 h-4" />
               </a>
@@ -281,7 +281,7 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* যোগাযোগ ও হেল্পলাইন */}
+          {/* যোগাযোগ ও হেল্পলাইন (সুপাবেজ site_settings থেকে ডায়নামিক ও ক্লিকযোগ্য) */}
           <div className="md:col-span-3 space-y-3">
             <h4 className="font-serif font-bold text-gray-900 text-sm border-b border-pink-50 pb-2">
               কাস্টমার কেয়ার
@@ -289,24 +289,29 @@ export default function Footer() {
             <div className="space-y-2 text-gray-600 text-[11.5px]">
               <p className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-pink-600 flex-shrink-0" />
-                <a href="tel:01700000000" className="hover:text-pink-600 font-mono font-bold">
-                  01700-000000 (সকাল ১০টা - রাত ১০টা)
+                <a 
+                  href={phoneHref} 
+                  className="hover:text-pink-600 font-mono font-bold transition"
+                  title="সরাসরি কল করতে ক্লিক করুন"
+                >
+                  {supportPhone}
                 </a>
               </p>
               <p className="flex items-center gap-2">
                 <MessageCircle className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
                 <a 
-                  href="https://wa.me/8801700000000?text=Hello%20FLAMINGO" 
+                  href={whatsappHref} 
                   target="_blank" 
                   rel="noreferrer" 
-                  className="hover:text-emerald-700 font-semibold"
+                  className="hover:text-emerald-700 font-semibold transition"
+                  title="হোয়াটসঅ্যাপে চ্যাট খুলুন"
                 >
                   হোয়াটসঅ্যাপে সরাসরি চ্যাট
                 </a>
               </p>
               <p className="flex items-start gap-2">
                 <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
-                <span>বনানী, ঢাকা-১২১৩, বাংলাদেশ</span>
+                <span>{storeAddress}</span>
               </p>
             </div>
 
@@ -328,7 +333,7 @@ export default function Footer() {
       <div className="border-t border-pink-100/70 py-6 px-4 text-center text-gray-500 bg-[#FFFDFD]">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2 text-[11px]">
           <p>
-            © {currentYear} <strong className="text-gray-800">{config.brandName || 'FLAMINGO'}</strong>. সর্বস্বত্ব সংরক্ষিত। খাঁটি ৯২৫ স্টার্লিং সিলভার জুয়েলারি।
+            {copyrightNotice}
           </p>
           <div className="flex items-center gap-4">
             <Link 

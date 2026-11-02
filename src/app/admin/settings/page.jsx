@@ -32,8 +32,12 @@ import {
   Globe,
   User,
   Sliders,
-  DollarSign
+  DollarSign,
+  Building
 } from 'lucide-react';
+import SiteSettingsForm from '@/components/admin/SiteSettingsForm';
+import AdminRouteGuard from '@/components/admin/AdminRouteGuard';
+import AdminNavbar from '@/components/admin/AdminNavbar';
 
 function AdminSettingsContent() {
   const { currentAdmin, isAuthLoaded, logoutAdmin } = useAuth();
@@ -41,10 +45,10 @@ function AdminSettingsContent() {
   const searchParams = useSearchParams();
   const { config, updateConfig, updatePricing, resetToDefault } = useSiteConfig();
 
-  // অ্যাক্টিভ ট্যাব স্টেট ('theme' | 'business' | 'coupons')
+  // অ্যাক্টিভ ট্যাব স্টেট ('theme' | 'site_info' | 'business' | 'coupons')
   const initialTab = searchParams.get('tab') || 'theme';
   const [activeTab, setActiveTab] = useState(
-    ['theme', 'business', 'coupons'].includes(initialTab) ? initialTab : 'theme'
+    ['theme', 'site_info', 'business', 'coupons'].includes(initialTab) ? initialTab : 'theme'
   );
 
   const [form, setForm] = useState(config);
@@ -93,7 +97,7 @@ function AdminSettingsContent() {
   // URL query parameter সিঙ্ক
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['theme', 'business', 'coupons'].includes(tab) && tab !== activeTab) {
+    if (tab && ['theme', 'site_info', 'business', 'coupons'].includes(tab) && tab !== activeTab) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -377,43 +381,10 @@ function AdminSettingsContent() {
       <div className="max-w-5xl mx-auto">
         
         {/* টপ হেডার ও ন্যাভিগেশন */}
+        <AdminNavbar activePage="settings" />
+
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-gray-200 mb-6 gap-4">
           <div>
-            <div className="flex flex-wrap items-center gap-2.5 mb-2 text-xs font-semibold">
-              <span className="text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <Sliders className="w-3.5 h-3.5" /> সিস্টেম সেটিংস
-              </span>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/admin/orders" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <Package className="w-3.5 h-3.5" /> অর্ডার ম্যানেজমেন্ট
-              </Link>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/admin/products" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <Sparkles className="w-3.5 h-3.5" /> প্রোডাক্ট ক্যাটালগ
-              </Link>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/admin/customers" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <Users className="w-3.5 h-3.5" /> কাস্টমার CRM
-              </Link>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/collections" 
-                target="_blank"
-                className="text-gray-400 hover:text-gray-700 flex items-center gap-1"
-              >
-                <span>স্টোরফ্রন্ট</span>
-                <ExternalLink className="w-3 h-3" />
-              </Link>
-            </div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <LayoutTemplate className="w-6 h-6 text-pink-600" /> FLAMINGO কন্ট্রোল সেন্টার ও অ্যাডমিন সেটিংস
             </h1>
@@ -423,29 +394,6 @@ function AdminSettingsContent() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* অ্যাডমিন প্রোফাইল ব্যাজ */}
-            <div className="flex items-center gap-2.5 bg-white p-2 sm:px-3 rounded-2xl border border-gray-200 shadow-xs text-xs">
-              <div className="text-right">
-                <div className="font-bold text-gray-900 leading-tight">{currentAdmin.name}</div>
-                <span className={`text-[10px] font-semibold px-2 py-0.2 rounded-md ${
-                  currentAdmin.role === 'superadmin' ? 'bg-pink-50 text-pink-700' : 'bg-gray-100 text-gray-700'
-                }`}>
-                  {currentAdmin.role === 'superadmin' ? 'Super Admin' : 'Staff Moderator'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  logoutAdmin();
-                  router.push('/admin/login');
-                }}
-                className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
-                title="লগআউট"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-
             <button
               type="button"
               onClick={handleReset}
@@ -467,6 +415,19 @@ function AdminSettingsContent() {
 
         {/* মেইন লজিক্যাল ট্যাব বার */}
         <div className="flex border-b border-gray-200 bg-white rounded-2xl p-1.5 shadow-xs mb-8 gap-1.5 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => handleTabChange('site_info')}
+            className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs sm:text-sm font-bold transition whitespace-nowrap ${
+              activeTab === 'site_info'
+                ? 'bg-pink-600 text-white shadow-md shadow-pink-600/20'
+                : 'text-gray-600 hover:text-pink-600 hover:bg-pink-50/50'
+            }`}
+          >
+            <Building className="w-4 h-4" />
+            <span>সাইট ইনফো ও ফুটার (Site Info & Footer)</span>
+          </button>
+
           <button
             type="button"
             onClick={() => handleTabChange('theme')}
@@ -522,6 +483,15 @@ function AdminSettingsContent() {
             </span>
           </button>
         </div>
+
+        {/* ========================================================================= */}
+        {/* ট্যাব: সাইট ইনফো ও ফুটার (Site Info & Footer Settings)                      */}
+        {/* ========================================================================= */}
+        {activeTab === 'site_info' && (
+          <div className="space-y-6 animate-in fade-in">
+            <SiteSettingsForm />
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* ট্যাব ১: থিম ও কনটেন্ট (Theme & Content Settings)                         */}
@@ -1423,8 +1393,10 @@ function AdminSettingsContent() {
 
 export default function AdminSettingsPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center text-xs text-gray-400">অ্যাডমিন সেটিংস লোড হচ্ছে...</div>}>
-      <AdminSettingsContent />
-    </Suspense>
+    <AdminRouteGuard requiredRole="super_admin">
+      <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center text-xs text-gray-400">অ্যাডমিন সেটিংস লোড হচ্ছে...</div>}>
+        <AdminSettingsContent />
+      </Suspense>
+    </AdminRouteGuard>
   );
 }

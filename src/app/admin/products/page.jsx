@@ -36,6 +36,8 @@ import {
 } from 'lucide-react';
 import { useSiteConfig } from '@/context/SiteConfigContext';
 import { calculateSellingPriceBreakdown } from '@/lib/pricingEngine';
+import AdminRouteGuard from '@/components/admin/AdminRouteGuard';
+import AdminNavbar from '@/components/admin/AdminNavbar';
 
 const CATEGORIES = ['All', 'Jewelry', 'Necklace', 'Ring', 'Bracelet', 'Earrings', 'Electronics', 'Lifestyle', 'Accessories', 'Home Decor', 'Other'];
 
@@ -360,104 +362,26 @@ export default function AdminProductsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-8">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <AdminRouteGuard requiredRole="moderator">
+      <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-8">
+        <div className="max-w-6xl mx-auto space-y-6">
 
-        {/* হেডার ও অ্যাডমিন ন্যাভবার */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-gray-200 gap-4">
-          <div>
-            {/* অ্যাডমিন লিংক বার */}
-            <div className="flex flex-wrap items-center gap-2.5 mb-2 text-xs font-semibold">
-              <Link 
-                href="/admin/settings?tab=theme" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <LayoutTemplate className="w-3.5 h-3.5" /> থিম সেটিংস
-              </Link>
-              <span className="text-gray-300">|</span>
-              {currentAdmin.role === 'superadmin' ? (
-                <Link 
-                  href="/admin/settings?tab=business" 
-                  className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-                >
-                  <Percent className="w-3.5 h-3.5" /> বিজনেস মার্জিন
-                </Link>
-              ) : (
-                <span className="text-gray-400 cursor-not-allowed flex items-center gap-1" title="শুধুমাত্র সুপারঅ্যাডমিন অ্যাক্সেস">
-                  <Percent className="w-3.5 h-3.5" /> মার্জিন (লক)
-                </span>
-              )}
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/admin/settings?tab=coupons" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <Tag className="w-3.5 h-3.5" /> কুপন ও মার্কেটিং
-              </Link>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/admin/orders" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <Package className="w-3.5 h-3.5" /> অর্ডার ম্যানেজমেন্ট
-              </Link>
-              <span className="text-gray-300">|</span>
-              <span className="text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> প্রোডাক্ট ক্যাটালগ
-              </span>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/admin/customers" 
-                className="text-gray-500 hover:text-pink-600 flex items-center gap-1 transition"
-              >
-                <Users className="w-3.5 h-3.5" /> কাস্টমার CRM
-              </Link>
-              <span className="text-gray-300">|</span>
-              <Link 
-                href="/collections" 
-                target="_blank"
-                className="text-gray-400 hover:text-gray-700 flex items-center gap-1"
-              >
-                <span>স্টোরফ্রন্ট</span>
-                <ExternalLink className="w-3 h-3" />
-              </Link>
+          {/* হেডার ও অ্যাডমিন ন্যাভবার */}
+          <AdminNavbar activePage="products" />
+
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-gray-200 gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-serif font-bold text-gray-900 flex items-center gap-2.5">
+                <Sparkles className="w-7 h-7 text-pink-600" /> FLAMINGO জুয়েলারি প্রোডাক্ট ম্যানেজার
+              </h1>
+              <p className="text-xs text-gray-500 mt-1">
+                স্টোরের সকল ৯২৫ সিলভার গহনা যোগ করুন, স্টক হালনাগাদ করুন ও ওয়ারেন্টি পলিসি ম্যানেজ করুন।
+              </p>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-serif font-bold text-gray-900 flex items-center gap-2.5">
-              <Sparkles className="w-7 h-7 text-pink-600" /> FLAMINGO জুয়েলারি প্রোডাক্ট ম্যানেজার
-            </h1>
-            <p className="text-xs text-gray-500 mt-1">
-              স্টোরের সকল ৯২৫ সিলভার গহনা যোগ করুন, স্টক হালনাগাদ করুন ও ওয়ারেন্টি পলিসি ম্যানেজ করুন।
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* অ্যাডমিন প্রোফাইল ব্যাজ ও লগআউট */}
-            <div className="flex items-center gap-2.5 bg-white p-2 sm:px-3 rounded-2xl border border-gray-200 shadow-xs text-xs">
-              <div className="text-right">
-                <div className="font-bold text-gray-900 leading-tight">{currentAdmin.name}</div>
-                <span className={`text-[10px] font-semibold px-2 py-0.2 rounded-md ${
-                  currentAdmin.role === 'superadmin' 
-                    ? 'bg-pink-50 text-pink-700' 
-                    : 'bg-blue-50 text-blue-700'
-                }`}>
-                  {currentAdmin.role === 'superadmin' ? 'Super Admin' : 'Order Moderator'}
-                </span>
-              </div>
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => {
-                  logoutAdmin();
-                  router.push('/admin/login');
-                }}
-                className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
-                title="লগআউট"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-
-            <button
-              onClick={handleResetDefaults}
+                onClick={handleResetDefaults}
               className="px-3 py-2 bg-white border border-gray-200 hover:bg-gray-100 text-gray-600 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
               title="ডিফল্ট প্রোডাক্টে রিসেট করুন"
             >
@@ -1250,6 +1174,7 @@ export default function AdminProductsPage() {
         </div>
       )}
 
-    </div>
+        </div>
+    </AdminRouteGuard>
   );
 }

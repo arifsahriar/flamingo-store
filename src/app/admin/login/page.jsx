@@ -20,15 +20,15 @@ export default function AdminLoginPage() {
   // ইতোমধ্যে অ্যাডমিন হিসেবে লগইন থাকলে ড্যাশবোর্ডে রিডাইরেক্ট
   useEffect(() => {
     if (isAuthLoaded && currentAdmin) {
-      if (currentAdmin.role === 'superadmin') {
-        router.push('/admin/settings');
+      if (currentAdmin.role === 'super_admin' || currentAdmin.role === 'superadmin') {
+        router.push('/admin/users');
       } else {
         router.push('/admin/orders');
       }
     }
   }, [currentAdmin, isAuthLoaded, router]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -39,11 +39,11 @@ export default function AdminLoginPage() {
 
     setIsSubmitting(true);
 
-    const res = loginAdmin({ username, password });
+    const res = await loginAdmin({ username, password });
 
     if (res.success) {
-      if (res.admin.role === 'superadmin') {
-        router.push('/admin/settings');
+      if (res.admin.role === 'super_admin' || res.admin.role === 'superadmin') {
+        router.push('/admin/users');
       } else {
         router.push('/admin/orders');
       }
